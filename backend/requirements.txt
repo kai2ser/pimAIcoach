@@ -1,19 +1,19 @@
 # Core
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-pydantic>=2.10.0
-pydantic-settings>=2.7.0
-httpx>=0.28.0
+fastapi==0.135.0
+uvicorn[standard]==0.41.0
+pydantic==2.12.5
+pydantic-settings==2.13.1
+httpx==0.28.1
 
 # LangChain core
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-community>=0.3.0
-langchain-text-splitters>=0.3.0
+langchain==1.2.10
+langchain-core==1.2.16
+langchain-community==0.4.1
+langchain-text-splitters==1.1.1
 
 # LLM providers
-langchain-anthropic>=0.3.0
-langchain-openai>=0.3.0
+langchain-anthropic==1.3.4
+langchain-openai==1.1.10
 # langchain-ollama>=0.3.0          # uncomment for local models
 
 # Embeddings
@@ -21,15 +21,15 @@ langchain-openai>=0.3.0
 # langchain-huggingface>=0.1.0     # uncomment for local embeddings
 
 # Vector stores
-langchain-postgres>=0.0.12
-psycopg[binary]>=3.2.0
-psycopg2-binary>=2.9.0
+langchain-postgres==0.0.17
+psycopg[binary]==3.3.3
+psycopg2-binary==2.9.11
 # langchain-chroma>=0.2.0          # uncomment for ChromaDB
 # faiss-cpu>=1.9.0                 # uncomment for FAISS
 
 # Document loaders
-pypdf>=5.0.0
-docx2txt>=0.8
+pypdf==6.7.4
+docx2txt==0.9
 
 # Semantic chunking (optional)
 # langchain-experimental>=0.3.0    # uncomment for SemanticChunker
@@ -38,9 +38,9 @@ docx2txt>=0.8
 # sentence-transformers>=3.0.0     # uncomment for cross-encoder reranking
 
 # Utilities
-python-multipart>=0.0.18
+python-multipart==0.0.22
 
 # Testing
-pytest>=7.4.0
-pytest-asyncio>=0.23.0
-pytest-cov>=4.1.0
+pytest==9.0.2
+pytest-asyncio==1.3.0
+pytest-cov==7.0.0
