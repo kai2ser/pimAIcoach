@@ -23,6 +23,7 @@ langchain-openai>=0.3.0
 # Vector stores
 langchain-postgres>=0.0.12
 psycopg[binary]>=3.2.0
+psycopg2-binary>=2.9.0
 # langchain-chroma>=0.2.0          # uncomment for ChromaDB
 # faiss-cpu>=1.9.0                 # uncomment for FAISS
 
