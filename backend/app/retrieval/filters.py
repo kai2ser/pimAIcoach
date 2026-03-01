@@ -28,13 +28,27 @@ def build_metadata_filter(filters: dict) -> dict:
         {"country": "COL"}                          → exact match
         {"country": ["COL", "KEN"]}                  → in-list ($in)
         {"year": {"$gte": 2020}}                     → range filter
+        {"year_from": 2020, "year_to": 2025}         → converted to year range
         {"country": "COL", "policy_guidance_tier": 3} → AND of conditions
 
     Returns a dict passable to vector store search_kwargs["filter"].
     """
     result = {}
 
+    # Handle year_from / year_to convenience keys from the frontend
+    year_from = filters.get("year_from")
+    year_to = filters.get("year_to")
+    if year_from is not None or year_to is not None:
+        year_range = {}
+        if year_from is not None:
+            year_range["$gte"] = int(year_from)
+        if year_to is not None:
+            year_range["$lte"] = int(year_to)
+        result["year"] = year_range
+
     for key, value in filters.items():
+        if key in ("year_from", "year_to"):
+            continue  # Already handled above
         if key not in FILTERABLE_FIELDS:
             continue
 
