@@ -92,7 +92,10 @@ async def ingest_from_url(request: IngestFromUrlRequest):
         )
     except Exception as e:
         logger.exception("Ingestion error")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred during document processing. Please check the logs.",
+        )
 
 
 @router.post("/ingest/file", response_model=IngestResponse)
@@ -136,7 +139,10 @@ async def ingest_from_file(
         )
     except Exception as e:
         logger.exception("File ingestion error")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred during document processing. Please check the logs.",
+        )
 
 
 @router.post("/ingest/batch", response_model=list[IngestResponse])
@@ -157,7 +163,10 @@ async def ingest_batch_endpoint(request: BatchIngestRequest):
         ]
     except Exception as e:
         logger.exception("Batch ingestion error")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred during document processing. Please check the logs.",
+        )
 
 
 @router.delete("/ingest/{record_id}")
@@ -168,4 +177,7 @@ async def delete_chunks(record_id: str):
         return {"record_id": record_id, "deleted": deleted}
     except Exception as e:
         logger.exception("Delete error")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred during document processing. Please check the logs.",
+        )

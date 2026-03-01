@@ -64,7 +64,15 @@ export function ChatInterface() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const statusMessages: Record<number, string> = {
+          429: "The service is receiving too many requests. Please wait a moment and try again.",
+          503: "The AI service is temporarily unavailable. Please try again in a few minutes.",
+          504: "The request timed out. Please try a simpler question or try again later.",
+        };
+        throw new Error(
+          statusMessages[response.status] ||
+            "Something went wrong. Please try again."
+        );
       }
 
       // Add empty assistant message that we'll fill with streamed tokens
@@ -98,6 +106,22 @@ export function ChatInterface() {
             } else if (event.type === "token") {
               streamedAnswer.current += event.data;
               updateAssistantMessage(streamedAnswer.current);
+            } else if (event.type === "error") {
+              // Server sent an error during streaming
+              const errorNote =
+                "\n\n---\n⚠️ " +
+                (event.data ||
+                  "An error occurred while generating the answer. Please try again.");
+              if (streamedAnswer.current) {
+                // Append error note to partial answer
+                streamedAnswer.current += errorNote;
+                updateAssistantMessage(streamedAnswer.current);
+              } else {
+                updateAssistantMessage(
+                  event.data ||
+                    "An error occurred while generating the answer. Please try again."
+                );
+              }
             }
             // "done" event — loop will end naturally when reader is done
           } catch {
@@ -106,10 +130,13 @@ export function ChatInterface() {
         }
       }
     } catch (error) {
+      const errorText =
+        error instanceof Error && error.message
+          ? error.message
+          : "Sorry, I encountered an error processing your question. Please try again.";
       const errorMessage: Message = {
         role: "assistant",
-        content:
-          "Sorry, I encountered an error processing your question. Please try again.",
+        content: errorText,
       };
       // If we already added an empty assistant message, replace it
       if (streamedAnswer.current === "") {

@@ -14,6 +14,13 @@ from typing import AsyncIterator
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
 
 from app.config import settings
 from app.generation.llm import get_llm
@@ -28,6 +35,48 @@ from app.retrieval.retriever import get_retriever
 from app.retrieval.reranker import rerank
 
 logger = logging.getLogger(__name__)
+
+# ---------- Transient-error retry helpers ---------- #
+
+# Exceptions that are worth retrying (timeouts, rate limits, connection errors)
+_RETRYABLE_EXCEPTIONS = (
+    TimeoutError,
+    ConnectionError,
+    OSError,
+)
+
+try:
+    from httpx import HTTPStatusError, ConnectError, ReadTimeout
+
+    _RETRYABLE_EXCEPTIONS += (HTTPStatusError, ConnectError, ReadTimeout)  # type: ignore[assignment]
+except ImportError:
+    pass
+
+_llm_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(_RETRYABLE_EXCEPTIONS),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+
+
+async def _invoke_llm(chain, inputs: dict):
+    """Invoke an LLM chain with retry logic for transient errors."""
+    @_llm_retry
+    async def _call():
+        return await chain.ainvoke(inputs)
+
+    return await _call()
+
+
+async def _retrieve_docs(retriever, question: str):
+    """Invoke the retriever with error wrapping."""
+    try:
+        return retriever.invoke(question)
+    except Exception as e:
+        logger.exception("Retriever error for question: %s", question)
+        raise RuntimeError("Failed to search the document store. Please try again.") from e
 
 
 async def rag_query(
@@ -55,7 +104,7 @@ async def rag_query(
 
     # Retrieve
     retriever = get_retriever(strategy=retriever_strategy, filters=filters)
-    docs = retriever.invoke(standalone_question)
+    docs = await _retrieve_docs(retriever, standalone_question)
     logger.info("Retrieved %d documents", len(docs))
 
     # Rerank (if configured)
@@ -75,7 +124,7 @@ async def rag_query(
     llm = get_llm()
 
     chain = prompt | llm
-    response = await chain.ainvoke({
+    response = await _invoke_llm(chain, {
         "context_instruction": context_instruction,
         "chat_history": lc_history,
         "question": question,
@@ -114,7 +163,7 @@ async def rag_query_stream(
         standalone_question = await _condense_question(question, lc_history)
 
     retriever = get_retriever(strategy=retriever_strategy, filters=filters)
-    docs = retriever.invoke(standalone_question)
+    docs = await _retrieve_docs(retriever, standalone_question)
 
     if settings.reranker:
         docs = rerank(standalone_question, docs)
@@ -160,7 +209,7 @@ async def _condense_question(
     prompt = get_condense_prompt()
     llm = get_llm()
     chain = prompt | llm
-    result = await chain.ainvoke({
+    result = await _invoke_llm(chain, {
         "chat_history": chat_history,
         "question": question,
     })

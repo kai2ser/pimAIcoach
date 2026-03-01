@@ -69,15 +69,26 @@ async def chat(request: ChatRequest):
 
     except Exception as e:
         logger.exception("Chat error")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while processing your question. Please try again.",
+        )
 
 
 async def _stream_response(request: ChatRequest):
     """Server-Sent Events stream for chat responses."""
-    async for chunk in rag_query_stream(
-        question=request.question,
-        chat_history=[msg.model_dump() for msg in request.chat_history],
-        filters=request.filters,
-        retriever_strategy=request.retriever_strategy,
-    ):
-        yield f"data: {json.dumps(chunk)}\n\n"
+    try:
+        async for chunk in rag_query_stream(
+            question=request.question,
+            chat_history=[msg.model_dump() for msg in request.chat_history],
+            filters=request.filters,
+            retriever_strategy=request.retriever_strategy,
+        ):
+            yield f"data: {json.dumps(chunk)}\n\n"
+    except Exception as e:
+        logger.exception("Streaming error")
+        error_event = {
+            "type": "error",
+            "data": "An error occurred while generating the answer. Please try again.",
+        }
+        yield f"data: {json.dumps(error_event)}\n\n"
