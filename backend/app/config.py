@@ -92,6 +92,9 @@ class RAGConfig(BaseSettings):
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     cohere_api_key: str = Field(default="", description="Cohere API key (optional)")
 
+    # -- Admin / Ingestion Auth ------------------------------------------------
+    admin_api_key: str = Field(default="", description="API key for admin and ingestion endpoints")
+
     # -- Vercel Blob (document source) -----------------------------------------
     blob_read_write_token: str = Field(
         default="",

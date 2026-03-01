@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.api.auth import require_api_key
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["admin"])
+router = APIRouter(tags=["admin"], dependencies=[Depends(require_api_key)])
 
 
 class RAGConfigResponse(BaseModel):

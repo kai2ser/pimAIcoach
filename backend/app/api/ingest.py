@@ -6,14 +6,15 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 
+from app.api.auth import require_api_key
 from app.ingestion.metadata import PolicyMetadata
 from app.ingestion.pipeline import ingest_document, ingest_batch, delete_document_chunks
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["ingestion"])
+router = APIRouter(tags=["ingestion"], dependencies=[Depends(require_api_key)])
 
 
 class IngestFromUrlRequest(BaseModel):
