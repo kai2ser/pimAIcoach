@@ -2,6 +2,8 @@
 PIM AI Coach — FastAPI application entrypoint.
 """
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,9 +17,15 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Build CORS origins from env var + local defaults
+_extra_origins = os.environ.get("PIM_CORS_ORIGINS", "")
+_origins = ["http://localhost:3000", "http://localhost:3001"]
+if _extra_origins:
+    _origins.extend([o.strip() for o in _extra_origins.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
