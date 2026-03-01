@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
 import { Send, Loader2 } from "lucide-react";
 import { ChatMessage, type Message } from "./ChatMessage";
 import { SourceCards, type Source } from "./SourceCards";
@@ -14,10 +14,22 @@ export function ChatInterface() {
   const [filters, setFilters] = useState<Filters>({});
   const [showFilters, setShowFilters] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamedAnswer = useRef("");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const updateAssistantMessage = useCallback((text: string) => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      const last = updated[updated.length - 1];
+      if (last && last.role === "assistant") {
+        updated[updated.length - 1] = { ...last, content: text };
+      }
+      return updated;
+    });
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,6 +40,7 @@ export function ChatInterface() {
     setInput("");
     setIsLoading(true);
     setSources([]);
+    streamedAnswer.current = "";
 
     try {
       const chatHistory = messages.map((m) => ({
@@ -46,6 +59,7 @@ export function ChatInterface() {
           question: input,
           chat_history: chatHistory,
           filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
+          stream: true,
         }),
       });
 
@@ -53,21 +67,62 @@ export function ChatInterface() {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const data = await response.json();
+      // Add empty assistant message that we'll fill with streamed tokens
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.answer,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      setSources(data.sources || []);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events (separated by double newlines)
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data: ")) continue;
+
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === "source") {
+              setSources((prev) => [...prev, event.data]);
+            } else if (event.type === "token") {
+              streamedAnswer.current += event.data;
+              updateAssistantMessage(streamedAnswer.current);
+            }
+            // "done" event — loop will end naturally when reader is done
+          } catch {
+            // Skip malformed JSON lines
+          }
+        }
+      }
     } catch (error) {
       const errorMessage: Message = {
         role: "assistant",
         content:
           "Sorry, I encountered an error processing your question. Please try again.",
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      // If we already added an empty assistant message, replace it
+      if (streamedAnswer.current === "") {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && last.content === "") {
+            return [...prev.slice(0, -1), errorMessage];
+          }
+          return [...prev, errorMessage];
+        });
+      } else {
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +162,7 @@ export function ChatInterface() {
             <ChatMessage key={i} message={msg} />
           ))}
 
-          {isLoading && (
+          {isLoading && streamedAnswer.current === "" && (
             <div className="flex items-center gap-2 py-4 text-sm text-[var(--muted-foreground)]">
               <Loader2 className="h-4 w-4 animate-spin" />
               Searching policies and generating answer...
