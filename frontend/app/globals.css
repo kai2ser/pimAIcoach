@@ -11,19 +11,6 @@
   --accent: #dbeafe;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --muted: #1c1c1c;
-    --muted-foreground: #a3a3a3;
-    --border: #2e2e2e;
-    --primary: #3b82f6;
-    --primary-foreground: #ffffff;
-    --accent: #1e3a5f;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);

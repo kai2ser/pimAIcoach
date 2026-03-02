@@ -19,7 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <header className="border-b border-[var(--border)]">
+        <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-white/95 backdrop-blur-sm">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
               <a href="/">
@@ -34,21 +34,27 @@ export default function RootLayout({
               </a>
               <span className="text-lg font-semibold">AI Coach</span>
             </div>
-            <nav className="flex items-center gap-6 text-sm text-[var(--muted-foreground)]">
-              <a href="/" className="hover:text-[var(--foreground)]">
+            <nav className="flex items-center gap-1 text-sm text-[var(--muted-foreground)]">
+              <a
+                href="/"
+                className="rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+              >
                 Home
               </a>
-              <a href="/coach" className="hover:text-[var(--foreground)]">
+              <a
+                href="/coach"
+                className="rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+              >
                 Coach
               </a>
               <a
                 href="/about"
-                className="flex items-center gap-1.5 hover:text-[var(--foreground)]"
+                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
+                  width="16"
+                  height="16"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -64,12 +70,12 @@ export default function RootLayout({
               </a>
               <a
                 href="/release-notes"
-                className="flex items-center gap-1.5 hover:text-[var(--foreground)]"
+                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
+                  width="16"
+                  height="16"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
