@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16">
@@ -8,6 +10,22 @@ export default function AboutPage() {
         to provide accurate, source-backed answers about international PIM best
         practices, national policies, and regulatory frameworks.
       </p>
+      <p className="mb-4 text-[var(--muted-foreground)]">
+        The focus of the AI coach is to help key PIM process stakeholders,
+        including Ministries of Finance/Planning/Economy (PIM process
+        coordinators), project owners (national Ministries, Departments,
+        Agencies (MDA), sub-national governments (SNGs), and State-Owned
+        Enterprises), as well as domestic and international financiers.
+      </p>
+      <div className="my-8 overflow-hidden rounded-lg border border-[var(--border)]">
+        <Image
+          src="/pim-stakeholders.png"
+          alt="8 Must Have Dimensions for Project Delivery — Guidance, Appraisal, Independent Review, Selection, Implementation, Adjustment, Operation, and Evaluation across Upstream Pipeline and Downstream Portfolio phases"
+          width={960}
+          height={540}
+          className="w-full h-auto"
+        />
+      </div>
       <p className="mb-4 text-[var(--muted-foreground)]">
         Built by{" "}
         <a
