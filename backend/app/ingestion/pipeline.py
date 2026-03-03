@@ -16,6 +16,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlalchemy import create_engine, text
+
+from app.config import settings
 from app.ingestion.loaders import load_from_path, load_from_url, load_from_bytes
 from app.ingestion.chunkers import chunk_documents
 from app.ingestion.metadata import PolicyMetadata, enrich_chunks
@@ -94,6 +97,33 @@ async def ingest_batch(
         )
         results.append(result)
     return results
+
+
+async def clear_collection() -> int:
+    """Remove all documents from the current vector store collection."""
+    engine = create_engine(settings.database_url)
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT uuid FROM langchain_pg_collection WHERE name = :name"),
+            {"name": settings.collection_name},
+        ).fetchone()
+        if row:
+            result = conn.execute(
+                text(
+                    "DELETE FROM langchain_pg_embedding WHERE collection_id = :coll_id"
+                ),
+                {"coll_id": row[0]},
+            )
+            conn.commit()
+            deleted = result.rowcount
+            logger.info(
+                "Cleared %d chunks from collection '%s'",
+                deleted,
+                settings.collection_name,
+            )
+            return deleted
+    logger.warning("Collection '%s' not found — nothing to clear", settings.collection_name)
+    return 0
 
 
 async def delete_document_chunks(record_id: str) -> int:
