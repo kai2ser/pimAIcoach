@@ -101,12 +101,6 @@ async def _profile_stream(country_iso3: str):
 
         # 2. Fetch structured policy records
         records = fetch_records_with_docs(country=country_iso3)
-        policy_context = format_policy_records_context(
-            records[0] if records else {}
-            # flatten — each record may have sub-docs but the prompt needs record-level data
-        ) if records else format_policy_records_context([])
-
-        # Actually, format_policy_records_context expects a list of record dicts
         policy_context = format_policy_records_context(records)
 
         yield _sse({
