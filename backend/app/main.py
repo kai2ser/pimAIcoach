@@ -12,6 +12,7 @@ from app.api.ingest import router as ingest_router
 from app.api.admin import router as admin_router
 from app.api.stats import router as stats_router
 from app.api.reindex import router as reindex_router
+from app.api.country_profile import router as country_profile_router
 
 app = FastAPI(
     title="PIM AI Coach",
@@ -38,6 +39,7 @@ app.include_router(ingest_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(stats_router, prefix="/api")
 app.include_router(reindex_router, prefix="/api")
+app.include_router(country_profile_router, prefix="/api")
 
 
 @app.get("/health")

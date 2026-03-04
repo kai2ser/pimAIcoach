@@ -37,6 +37,11 @@ docx2txt==0.9
 # Reranking (optional)
 # sentence-transformers>=3.0.0     # uncomment for cross-encoder reranking
 
+# Document export
+python-docx==1.1.2
+fpdf2==2.8.3
+markdown==3.7
+
 # Utilities
 python-multipart==0.0.22
 tenacity==9.1.4

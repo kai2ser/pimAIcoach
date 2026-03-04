@@ -16,7 +16,7 @@ export default function Home() {
         Start a conversation
       </Link>
 
-      <div className="mt-16 grid gap-6 text-left sm:grid-cols-3">
+      <div className="mt-16 grid gap-6 text-left sm:grid-cols-2">
         <div className="rounded-lg border border-[var(--border)] p-5">
           <h3 className="mb-2 font-semibold">Policy Q&A</h3>
           <p className="text-sm text-[var(--muted-foreground)]">
@@ -37,6 +37,19 @@ export default function Home() {
             Learn about international good practices in public investment
             appraisal, selection, and monitoring.
           </p>
+        </div>
+        <div className="rounded-lg border border-[var(--border)] p-5">
+          <h3 className="mb-2 font-semibold">Country PIM Profile</h3>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Generate a comprehensive 2-page institutional profile summarizing
+            any country&apos;s PIM framework, policies, and reform priorities.
+          </p>
+          <Link
+            href="/country-profile"
+            className="mt-3 inline-block text-sm font-medium text-[var(--primary)] hover:underline"
+          >
+            Generate a profile &rarr;
+          </Link>
         </div>
       </div>
     </div>
