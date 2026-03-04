@@ -307,9 +307,31 @@ def _add_formatted_run(paragraph, text: str):
             run.font.size = Pt(10)
 
 
+def _sanitize_for_pdf(text: str) -> str:
+    """Replace Unicode characters unsupported by fpdf2 built-in fonts (Latin-1)."""
+    replacements = {
+        "\u2014": "--",   # em-dash
+        "\u2013": "-",    # en-dash
+        "\u2018": "'",    # left single quote
+        "\u2019": "'",    # right single quote
+        "\u201c": '"',    # left double quote
+        "\u201d": '"',    # right double quote
+        "\u2026": "...",  # ellipsis
+        "\u2022": "-",    # bullet
+        "\u00a0": " ",    # non-breaking space
+        "\u200b": "",     # zero-width space
+    }
+    for char, repl in replacements.items():
+        text = text.replace(char, repl)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def _export_pdf(content: str, country_name: str) -> Response:
     """Generate a PDF document from markdown content."""
     from fpdf import FPDF
+
+    country_name = _sanitize_for_pdf(country_name)
+    content = _sanitize_for_pdf(content)
 
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=25)
@@ -318,7 +340,7 @@ def _export_pdf(content: str, country_name: str) -> Response:
     # Header
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(128, 128, 128)
-    pdf.cell(0, 5, f"PIM Transparency Briefing — {country_name}", align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, f"PIM Transparency Briefing - {country_name}", align="R", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
 
     # Title — green accent
