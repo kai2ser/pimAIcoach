@@ -51,6 +51,19 @@ export default function Home() {
             Generate a profile &rarr;
           </Link>
         </div>
+        <div className="rounded-lg border border-[var(--border)] p-5">
+          <h3 className="mb-2 font-semibold">Country PIM Transparency</h3>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Generate a transparency briefing with policy repository document
+            listings, tier classifications, and completeness analysis.
+          </p>
+          <Link
+            href="/country-transparency"
+            className="mt-3 inline-block text-sm font-medium text-emerald-600 hover:underline"
+          >
+            Generate a briefing &rarr;
+          </Link>
+        </div>
       </div>
     </div>
   );
