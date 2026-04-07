@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /raging
+
+Sitemap: https://pim-a-icoach.vercel.app/sitemap.xml

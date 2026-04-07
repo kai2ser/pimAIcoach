@@ -15,6 +15,19 @@ from app.logging_config import setup_logging, generate_request_id, request_id_va
 # Initialise structured logging before anything else
 setup_logging()
 
+# Optional Sentry integration — set PIM_SENTRY_DSN to enable
+_sentry_dsn = os.environ.get("PIM_SENTRY_DSN", "")
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            traces_sample_rate=0.1,
+            environment=os.environ.get("RAILWAY_ENVIRONMENT", "production"),
+        )
+    except ImportError:
+        pass  # sentry-sdk not installed — skip silently
+
 from app.api.chat import router as chat_router
 from app.api.ingest import router as ingest_router
 from app.api.admin import router as admin_router

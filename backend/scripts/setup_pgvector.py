@@ -43,6 +43,15 @@ def setup():
 
             if exists:
                 print("LangChain PGVector tables already exist.")
+
+                # Create GIN index on cmetadata for faster stats/filter queries
+                print("Ensuring GIN index on cmetadata...")
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_embedding_cmetadata
+                    ON langchain_pg_embedding USING gin (cmetadata);
+                """)
+                conn.commit()
+                print("GIN index on cmetadata ensured.")
             else:
                 print("LangChain PGVector tables will be auto-created on first use.")
 

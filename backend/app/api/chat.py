@@ -7,11 +7,12 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.generation.chains import rag_query, rag_query_stream
+from app.ratelimit import chat_limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
@@ -50,8 +51,9 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, raw_request: Request):
     """Ask a question to the PIM AI Coach."""
+    chat_limiter.check(raw_request)
     try:
         if request.stream:
             return StreamingResponse(

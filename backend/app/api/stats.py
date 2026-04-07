@@ -13,11 +13,12 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.config import settings
+from app.ratelimit import stats_limiter
 from app.vectorstore.store import _get_pg_engine
 
 logger = logging.getLogger(__name__)
@@ -91,8 +92,9 @@ _TIER_LABELS = {
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=CollectionStats)
-async def get_stats():
+async def get_stats(request: Request):
     """Return aggregate statistics (cached 60s)."""
+    stats_limiter.check(request)
     now = time.monotonic()
     if _cache["data"] is not None and now < _cache["expires_at"]:
         return _cache["data"]
@@ -103,8 +105,9 @@ async def get_stats():
 
 
 @router.get("/stats/detail", response_model=DetailedStats)
-async def get_stats_detail():
+async def get_stats_detail(request: Request):
     """Return detailed breakdowns by country, tier, and year (cached 60s)."""
+    stats_limiter.check(request)
     now = time.monotonic()
     if _detail_cache["data"] is not None and now < _detail_cache["expires_at"]:
         return _detail_cache["data"]
