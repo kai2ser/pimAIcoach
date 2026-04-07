@@ -2,14 +2,51 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { MobileNav } from "@/components/MobileNav";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "PIM AI Coach",
+  title: {
+    default: "PIM AI Coach",
+    template: "%s | PIM AI Coach",
+  },
   description:
-    "AI-powered coaching assistant for Public Investment Management",
+    "AI-powered coaching assistant for Public Investment Management — grounded in international policy documents.",
+  metadataBase: new URL("https://pim-a-icoach.vercel.app"),
+  openGraph: {
+    title: "PIM AI Coach",
+    description:
+      "AI-powered coaching assistant for Public Investment Management — grounded in international policy documents.",
+    url: "https://pim-a-icoach.vercel.app",
+    siteName: "PIM AI Coach",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "PIM AI Coach",
+    description:
+      "AI-powered coaching assistant for Public Investment Management",
+  },
+  icons: {
+    icon: "/pim-pam-logo.png",
+    apple: "/pim-pam-logo.png",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
+
+const NAV_LINKS = [
+  { href: "/", label: "Home" },
+  { href: "/coach", label: "Coach" },
+  { href: "/about", label: "About" },
+  { href: "/raging", label: "RAGing" },
+  { href: "/statistics", label: "Statistics" },
+  { href: "/release-notes", label: "Release Notes" },
+];
 
 export default function RootLayout({
   children,
@@ -34,108 +71,22 @@ export default function RootLayout({
               </a>
               <span className="text-lg font-semibold">AI Coach</span>
             </div>
-            <nav className="flex items-center gap-1 text-sm text-[var(--muted-foreground)]">
-              <a
-                href="/"
-                className="rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                Home
-              </a>
-              <a
-                href="/coach"
-                className="rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                Coach
-              </a>
-              <a
-                href="/about"
-                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+
+            {/* Desktop nav */}
+            <nav className="hidden md:flex items-center gap-1 text-sm text-[var(--muted-foreground)]">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
                 >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-                About
-              </a>
-              <a
-                href="/raging"
-                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <ellipse cx="12" cy="5" rx="9" ry="3" />
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                </svg>
-                RAGing
-              </a>
-              <a
-                href="/statistics"
-                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <line x1="18" y1="20" x2="18" y2="10" />
-                  <line x1="12" y1="20" x2="12" y2="4" />
-                  <line x1="6" y1="20" x2="6" y2="14" />
-                </svg>
-                Statistics
-              </a>
-              <a
-                href="/release-notes"
-                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
-                Release Notes
-              </a>
+                  {link.label}
+                </a>
+              ))}
             </nav>
+
+            {/* Mobile nav */}
+            <MobileNav links={NAV_LINKS} />
           </div>
         </header>
         <main>{children}</main>

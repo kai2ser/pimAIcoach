@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, RotateCcw } from "lucide-react";
 import { ChatMessage, type Message } from "./ChatMessage";
 import { SourceCards, type Source } from "./SourceCards";
 import { MetadataFilters, type Filters } from "@/components/filters/MetadataFilters";
@@ -238,6 +238,22 @@ export function ChatInterface() {
           onSubmit={handleSubmit}
           className="mx-auto flex max-w-3xl items-center gap-2"
         >
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setMessages([]);
+                setSources([]);
+                setInput("");
+                streamedAnswer.current = "";
+              }}
+              aria-label="New chat"
+              title="New chat"
+              className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}

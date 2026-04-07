@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SkeletonGrid } from "@/components/Skeleton";
 
 interface CollectionStats {
   total_chunks: number;
@@ -194,29 +195,7 @@ export default function RagingPage() {
       </p>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-          <svg
-            className="h-4 w-4 animate-spin"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
-          Loading collection statistics…
-        </div>
+        <SkeletonGrid count={3} />
       ) : stats ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-5">

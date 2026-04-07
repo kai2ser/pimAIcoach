@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 
 export interface Filters {
   country?: string;
@@ -11,12 +11,26 @@ export interface Filters {
   lang_type?: string;
 }
 
+interface Country {
+  iso3: string;
+  name: string;
+}
+
 interface MetadataFiltersProps {
   filters: Filters;
   onChange: (filters: Filters) => void;
 }
 
 export const MetadataFilters = memo(function MetadataFilters({ filters, onChange }: MetadataFiltersProps) {
+  const [countries, setCountries] = useState<Country[]>([]);
+
+  useEffect(() => {
+    fetch("/api/coach/countries")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: Country[]) => setCountries(data))
+      .catch(() => setCountries([]));
+  }, []);
+
   const update = (key: keyof Filters, value: string | number | undefined) => {
     const next = { ...filters };
     if (value === "" || value === undefined) {
@@ -31,16 +45,20 @@ export const MetadataFilters = memo(function MetadataFilters({ filters, onChange
     <div className="flex flex-wrap items-end gap-3">
       <label className="block">
         <span className="mb-1 block text-xs text-[var(--muted-foreground)]">
-          Country (ISO3)
+          Country
         </span>
-        <input
-          type="text"
+        <select
           value={filters.country || ""}
-          onChange={(e) => update("country", e.target.value.toUpperCase())}
-          placeholder="e.g. COL"
-          maxLength={3}
-          className="w-20 rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
-        />
+          onChange={(e) => update("country", e.target.value || undefined)}
+          className="rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs"
+        >
+          <option value="">All countries</option>
+          {countries.map((c) => (
+            <option key={c.iso3} value={c.iso3}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label className="block">

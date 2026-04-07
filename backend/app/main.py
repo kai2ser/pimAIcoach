@@ -42,6 +42,8 @@ app = FastAPI(
     title="PIM AI Coach",
     description="RAG-powered Public Investment Management coaching assistant",
     version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 
