@@ -69,47 +69,6 @@ export default function RootLayout({
                 About
               </a>
               <a
-                href="/country-profile"
-                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="2" y1="12" x2="22" y2="12" />
-                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                </svg>
-                Country Profile
-              </a>
-              <a
-                href="/country-transparency"
-                className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                PIM Transparency
-              </a>
-              <a
                 href="/raging"
                 className="flex items-center gap-1.5 rounded-md px-3 py-2 hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
               >
