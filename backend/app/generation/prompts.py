@@ -65,12 +65,27 @@ def get_condense_prompt() -> ChatPromptTemplate:
     ])
 
 
-def format_documents(docs) -> str:
-    """Format retrieved documents into a context string for the prompt."""
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate: ~4 characters per token for English text."""
+    return len(text) // 4
+
+
+# Leave headroom for system prompt + answer generation
+_MAX_CONTEXT_TOKENS = 6000
+
+
+def format_documents(docs, max_context_tokens: int = _MAX_CONTEXT_TOKENS) -> str:
+    """Format retrieved documents into a context string for the prompt.
+
+    Automatically truncates to stay within *max_context_tokens* so the
+    combined prompt never exceeds the model's context window.
+    """
     if not docs:
         return ""
 
-    parts = []
+    parts: list[str] = []
+    running_tokens = 0
+
     for i, doc in enumerate(docs, 1):
         meta = doc.metadata
         header_parts = []
@@ -85,10 +100,17 @@ def format_documents(docs) -> str:
         tier = meta.get("policy_guidance_tier")
         tier_label = {1: "Legislation", 2: "Regulation", 3: "Guidelines", 4: "Strategy"}.get(tier, "")
 
-        parts.append(
+        block = (
             f"[{i}] {header}"
             + (f" ({tier_label})" if tier_label else "")
             + f"\n{doc.page_content}"
         )
+
+        block_tokens = _estimate_tokens(block)
+        if running_tokens + block_tokens > max_context_tokens and parts:
+            # Already have at least one doc — stop adding more
+            break
+        parts.append(block)
+        running_tokens += block_tokens
 
     return "\n\n".join(parts)

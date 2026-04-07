@@ -23,6 +23,7 @@ export default function AboutPage() {
           alt="8 Must Have Dimensions for Project Delivery — Guidance, Appraisal, Independent Review, Selection, Implementation, Adjustment, Operation, and Evaluation across Upstream Pipeline and Downstream Portfolio phases"
           width={960}
           height={540}
+          loading="lazy"
           className="w-full h-auto"
         />
       </div>

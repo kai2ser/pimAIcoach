@@ -12,9 +12,22 @@ from __future__ import annotations
 from functools import lru_cache
 
 from langchain_core.vectorstores import VectorStore
+from sqlalchemy import create_engine
 
 from app.config import settings
 from app.vectorstore.embeddings import get_embeddings
+
+
+@lru_cache(maxsize=1)
+def _get_pg_engine():
+    """Create a SQLAlchemy engine with connection pooling (cached singleton)."""
+    return create_engine(
+        settings.database_url,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_pre_ping=True,
+    )
 
 
 @lru_cache(maxsize=1)

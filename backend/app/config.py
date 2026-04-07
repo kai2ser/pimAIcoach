@@ -9,7 +9,7 @@ code changes required.
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class RAGConfig(BaseSettings):
@@ -100,6 +100,44 @@ class RAGConfig(BaseSettings):
         default="",
         description="Vercel Blob token to access stored documents",
     )
+
+    # -- Validators ---------------------------------------------------------------
+
+    @field_validator("chunk_size")
+    @classmethod
+    def _chunk_size_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("chunk_size must be positive")
+        return v
+
+    @field_validator("chunk_overlap")
+    @classmethod
+    def _overlap_less_than_size(cls, v: int, info) -> int:
+        chunk_size = info.data.get("chunk_size")
+        if chunk_size is not None and v >= chunk_size:
+            raise ValueError(f"chunk_overlap ({v}) must be less than chunk_size ({chunk_size})")
+        return v
+
+    @field_validator("retriever_k")
+    @classmethod
+    def _retriever_k_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("retriever_k must be positive")
+        return v
+
+    @field_validator("llm_temperature")
+    @classmethod
+    def _temperature_range(cls, v: float) -> float:
+        if not (0.0 <= v <= 2.0):
+            raise ValueError(f"llm_temperature must be between 0.0 and 2.0, got {v}")
+        return v
+
+    @field_validator("llm_max_tokens")
+    @classmethod
+    def _max_tokens_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("llm_max_tokens must be positive")
+        return v
 
     model_config = {
         "env_prefix": "PIM_",

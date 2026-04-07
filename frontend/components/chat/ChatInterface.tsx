@@ -5,6 +5,12 @@ import { Send, Loader2 } from "lucide-react";
 import { ChatMessage, type Message } from "./ChatMessage";
 import { SourceCards, type Source } from "./SourceCards";
 import { MetadataFilters, type Filters } from "@/components/filters/MetadataFilters";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+let _msgIdCounter = 0;
+function nextMsgId(): string {
+  return `msg-${Date.now()}-${++_msgIdCounter}`;
+}
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -15,17 +21,19 @@ export function ChatInterface() {
   const [showFilters, setShowFilters] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamedAnswer = useRef("");
+  const assistantMsgId = useRef("");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const updateAssistantMessage = useCallback((text: string) => {
+    const targetId = assistantMsgId.current;
     setMessages((prev) => {
       const updated = [...prev];
-      const last = updated[updated.length - 1];
-      if (last && last.role === "assistant") {
-        updated[updated.length - 1] = { ...last, content: text };
+      const idx = updated.findIndex((m) => m.id === targetId);
+      if (idx !== -1) {
+        updated[idx] = { ...updated[idx], content: text };
       }
       return updated;
     });
@@ -35,7 +43,7 @@ export function ChatInterface() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = { role: "user", content: input };
+    const userMessage: Message = { id: nextMsgId(), role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
@@ -76,7 +84,9 @@ export function ChatInterface() {
       }
 
       // Add empty assistant message that we'll fill with streamed tokens
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      const asstId = nextMsgId();
+      assistantMsgId.current = asstId;
+      setMessages((prev) => [...prev, { id: asstId, role: "assistant", content: "" }]);
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error("No response body");
@@ -109,11 +119,10 @@ export function ChatInterface() {
             } else if (event.type === "error") {
               // Server sent an error during streaming
               const errorNote =
-                "\n\n---\n⚠️ " +
+                "\n\n---\n\u26a0\ufe0f " +
                 (event.data ||
                   "An error occurred while generating the answer. Please try again.");
               if (streamedAnswer.current) {
-                // Append error note to partial answer
                 streamedAnswer.current += errorNote;
                 updateAssistantMessage(streamedAnswer.current);
               } else {
@@ -124,8 +133,8 @@ export function ChatInterface() {
               }
             }
             // "done" event — loop will end naturally when reader is done
-          } catch {
-            // Skip malformed JSON lines
+          } catch (e) {
+            console.warn("[ChatInterface] Failed to parse SSE event:", line, e);
           }
         }
       }
@@ -135,6 +144,7 @@ export function ChatInterface() {
           ? error.message
           : "Sorry, I encountered an error processing your question. Please try again.";
       const errorMessage: Message = {
+        id: nextMsgId(),
         role: "assistant",
         content: errorText,
       };
@@ -185,8 +195,10 @@ export function ChatInterface() {
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <ChatMessage key={i} message={msg} />
+          {messages.map((msg) => (
+            <ErrorBoundary key={msg.id}>
+              <ChatMessage message={msg} />
+            </ErrorBoundary>
           ))}
 
           {isLoading && streamedAnswer.current === "" && (
@@ -204,7 +216,9 @@ export function ChatInterface() {
       {sources.length > 0 && (
         <div className="border-t border-[var(--border)] bg-[var(--muted)] px-4 py-3">
           <div className="mx-auto max-w-3xl">
-            <SourceCards sources={sources} />
+            <ErrorBoundary>
+              <SourceCards sources={sources} />
+            </ErrorBoundary>
           </div>
         </div>
       )}
@@ -227,6 +241,7 @@ export function ChatInterface() {
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
+            aria-label="Toggle metadata filters"
             className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
           >
             Filters {Object.values(filters).filter(Boolean).length > 0 && `(${Object.values(filters).filter(Boolean).length})`}
@@ -242,7 +257,8 @@ export function ChatInterface() {
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50"
+            aria-label="Send message"
+            className="rounded-lg bg-[var(--primary)] p-2 text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-4 w-4" />
           </button>

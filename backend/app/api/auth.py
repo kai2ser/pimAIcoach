@@ -4,10 +4,15 @@ API-key authentication dependency for admin and ingestion endpoints.
 
 from __future__ import annotations
 
+import hmac
+import logging
+
 from fastapi import HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Scheme declarations (auto_error=False so we can check both and give clear messages)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -49,7 +54,8 @@ async def require_api_key(
             detail="Missing API key. Provide via X-API-Key header or Authorization: Bearer <key>.",
         )
 
-    if provided_key != settings.admin_api_key:
+    if not hmac.compare_digest(provided_key.encode(), settings.admin_api_key.encode()):
+        logger.warning("Invalid API key attempt")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid API key.",

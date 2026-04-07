@@ -85,15 +85,10 @@ async def _reindex_stream(request: ReindexRequest):
         )
 
         # --- Optionally clear the existing collection ---
-        if request.clear_existing:
-            yield _sse({"type": "status", "message": "Clearing existing collection..."})
-            deleted = await clear_collection()
-            yield _sse(
-                {
-                    "type": "status",
-                    "message": f"Cleared {deleted} existing chunks.",
-                }
-            )
+        # Safety: we defer clearing until AFTER at least one document succeeds
+        # to avoid leaving the collection empty on total failure.
+        _clear_pending = request.clear_existing
+        _cleared = False
 
         # --- Ingest documents one-by-one, streaming progress ---
         succeeded = 0
@@ -116,6 +111,18 @@ async def _reindex_stream(request: ReindexRequest):
             )
 
             try:
+                # Clear collection just before the first successful ingest
+                if _clear_pending and not _cleared:
+                    yield _sse({"type": "status", "message": "Clearing existing collection..."})
+                    deleted = await clear_collection()
+                    _cleared = True
+                    yield _sse(
+                        {
+                            "type": "status",
+                            "message": f"Cleared {deleted} existing chunks.",
+                        }
+                    )
+
                 country_name = resolve_country_name(record["country"])
 
                 metadata = PolicyMetadata(

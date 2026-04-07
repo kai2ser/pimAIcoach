@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useSSEStream, type SSEEvent } from "@/lib/useSSEStream";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface Country {
   iso3: string;
@@ -12,11 +14,11 @@ interface Country {
 export default function CountryProfilePage() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [loadingCountries, setLoadingCountries] = useState(true);
+  const [countriesError, setCountriesError] = useState<string | null>(null);
   const [selectedIso3, setSelectedIso3] = useState("");
   const [selectedName, setSelectedName] = useState("");
 
   // Generation state
-  const [generating, setGenerating] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [reportContent, setReportContent] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,12 +26,42 @@ export default function CountryProfilePage() {
   // Export state
   const [exporting, setExporting] = useState<"docx" | "pdf" | null>(null);
 
+  // Accumulated content ref to avoid stale closure in onEvent
+  const contentRef = useCallback(() => {
+    let acc = "";
+    return {
+      reset: () => { acc = ""; },
+      append: (text: string) => { acc += text; return acc; },
+    };
+  }, [])();
+
+  const { startStream, isStreaming } = useSSEStream({
+    onEvent: (event: SSEEvent) => {
+      switch (event.type) {
+        case "status":
+          setStatusMsg(event.data as string);
+          break;
+        case "token":
+          setReportContent(contentRef.append(event.data as string));
+          break;
+        case "error":
+          setError(event.data as string);
+          break;
+        case "done":
+          break;
+      }
+    },
+  });
+
   // Load countries on mount
   useEffect(() => {
     fetch("/api/coach/countries")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((data: Country[]) => setCountries(data))
-      .catch(() => setCountries([]))
+      .catch(() => {
+        setCountries([]);
+        setCountriesError("Failed to load countries. Please refresh the page.");
+      })
       .finally(() => setLoadingCountries(false));
   }, []);
 
@@ -40,7 +72,6 @@ export default function CountryProfilePage() {
       setSelectedIso3(iso3);
       const c = countries.find((c) => c.iso3 === iso3);
       setSelectedName(c?.name ?? "");
-      // Reset previous results
       setReportContent("");
       setError(null);
       setStatusMsg(null);
@@ -51,67 +82,14 @@ export default function CountryProfilePage() {
   // Generate profile
   async function generateProfile() {
     if (!selectedIso3) return;
-
-    setGenerating(true);
     setReportContent("");
     setError(null);
     setStatusMsg(null);
+    contentRef.reset();
 
-    try {
-      const res = await fetch("/api/coach/country-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ country_iso3: selectedIso3 }),
-      });
-
-      if (!res.ok) {
-        setError(`Request failed (${res.status}).`);
-        setGenerating(false);
-        return;
-      }
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let accumulated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop()!;
-
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            switch (event.type) {
-              case "status":
-                setStatusMsg(event.data);
-                break;
-              case "token":
-                accumulated += event.data;
-                setReportContent(accumulated);
-                break;
-              case "error":
-                setError(event.data);
-                break;
-              case "done":
-                break;
-            }
-          } catch {
-            // skip malformed SSE lines
-          }
-        }
-      }
-    } catch {
-      setError("Connection lost. Please try again.");
-    } finally {
-      setGenerating(false);
-    }
+    await startStream("/api/coach/country-profile", {
+      country_iso3: selectedIso3,
+    });
   }
 
   // Export as DOCX or PDF
@@ -138,7 +116,8 @@ export default function CountryProfilePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `PIM_Profile_${selectedName.replace(/\s+/g, "_")}.${format}`;
+      const safeName = selectedName.replace(/[^a-z0-9_\- ]/gi, "").replace(/\s+/g, "_");
+      a.download = `PIM_Profile_${safeName}.${format}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -186,11 +165,12 @@ export default function CountryProfilePage() {
               id="country-select"
               value={selectedIso3}
               onChange={handleCountryChange}
-              disabled={loadingCountries || generating}
+              disabled={loadingCountries || isStreaming}
+              aria-describedby={countriesError ? "countries-error" : undefined}
               className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
             >
               <option value="">
-                {loadingCountries ? "Loading countries…" : "Choose a country…"}
+                {loadingCountries ? "Loading countries\u2026" : "Choose a country\u2026"}
               </option>
               {countries.map((c) => (
                 <option key={c.iso3} value={c.iso3}>
@@ -198,21 +178,25 @@ export default function CountryProfilePage() {
                 </option>
               ))}
             </select>
+            {countriesError && (
+              <p id="countries-error" className="mt-1 text-xs text-red-600">{countriesError}</p>
+            )}
           </div>
 
           {/* Generate button */}
           <button
             onClick={generateProfile}
-            disabled={!selectedIso3 || generating}
+            disabled={!selectedIso3 || isStreaming}
             className="inline-flex items-center gap-2 rounded-md bg-[var(--primary)] px-5 py-2 text-sm font-medium text-[var(--primary-foreground)] transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {generating ? (
+            {isStreaming ? (
               <>
                 <svg
                   className="h-4 w-4 animate-spin"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <circle
                     className="opacity-25"
@@ -228,7 +212,7 @@ export default function CountryProfilePage() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
-                Generating…
+                Generating&hellip;
               </>
             ) : (
               "Generate Profile"
@@ -237,70 +221,38 @@ export default function CountryProfilePage() {
         </div>
 
         {/* Status message */}
-        {statusMsg && generating && (
-          <p className="text-sm text-[var(--muted-foreground)]">{statusMsg}</p>
+        {statusMsg && isStreaming && (
+          <p className="text-sm text-[var(--muted-foreground)]" aria-live="polite">{statusMsg}</p>
         )}
       </div>
 
       {/* ── Error display ──────────────────────────────────────── */}
       {error && (
-        <div className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300">
+        <div role="alert" className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300">
           {error}
         </div>
       )}
 
       {/* ── Report display ─────────────────────────────────────── */}
-      {(reportContent || generating) && (
+      {(reportContent || isStreaming) && (
         <div className="mt-8">
           {/* Download buttons */}
-          {reportContent && !generating && (
+          {reportContent && !isStreaming && (
             <div className="mb-4 flex gap-3">
               <button
                 onClick={() => handleExport("docx")}
                 disabled={!!exporting}
+                aria-label="Download as Word document"
                 className="inline-flex items-center gap-2 rounded-md border border-[var(--primary)] px-4 py-2 text-sm font-medium text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/10 disabled:opacity-50"
               >
                 {exporting === "docx" ? (
                   <>
-                    <svg
-                      className="h-4 w-4 animate-spin"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    Exporting…
+                    <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    Exporting&hellip;
                   </>
                 ) : (
                   <>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                     Download Word (.docx)
                   </>
                 )}
@@ -309,49 +261,17 @@ export default function CountryProfilePage() {
               <button
                 onClick={() => handleExport("pdf")}
                 disabled={!!exporting}
+                aria-label="Download as PDF"
                 className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] disabled:opacity-50"
               >
                 {exporting === "pdf" ? (
                   <>
-                    <svg
-                      className="h-4 w-4 animate-spin"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    Exporting…
+                    <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    Exporting&hellip;
                   </>
                 ) : (
                   <>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                     Download PDF
                   </>
                 )}
@@ -362,10 +282,12 @@ export default function CountryProfilePage() {
           {/* Rendered report */}
           <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-6 shadow-sm">
             <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-[var(--foreground)] prose-p:text-[var(--foreground)] prose-td:text-sm prose-th:text-sm prose-table:text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {reportContent}
-              </ReactMarkdown>
-              {generating && (
+              <ErrorBoundary>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {reportContent}
+                </ReactMarkdown>
+              </ErrorBoundary>
+              {isStreaming && (
                 <span className="inline-block h-4 w-1 animate-pulse bg-[var(--primary)]" />
               )}
             </div>

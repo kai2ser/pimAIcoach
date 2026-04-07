@@ -130,8 +130,8 @@ export default function RagingPage() {
                 setError(event.message);
                 break;
             }
-          } catch {
-            // ignore malformed SSE lines
+          } catch (e) {
+            console.warn("[RAGing] Failed to parse SSE event:", line, e);
           }
         }
       }
@@ -181,6 +181,7 @@ export default function RagingPage() {
           alt="Working Across Languages for AI Retrieval Augmented Generation — diagram showing English and Non-English source data flowing to English and Non-English responses"
           width={960}
           height={540}
+          loading="lazy"
           className="w-full h-auto"
         />
       </div>

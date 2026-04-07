@@ -37,11 +37,18 @@ def load_from_path(file_path: str | Path) -> list[Document]:
     return loader.load()
 
 
+MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
 async def load_from_url(url: str, filename: str | None = None) -> list[Document]:
     """Download a document from a URL (e.g. Vercel Blob) and load it."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.get(url, follow_redirects=True)
         response.raise_for_status()
+        if len(response.content) > MAX_DOWNLOAD_SIZE:
+            raise ValueError(
+                f"Document exceeds maximum size of {MAX_DOWNLOAD_SIZE // (1024 * 1024)} MB"
+            )
 
     ext = _guess_extension(url, filename)
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:

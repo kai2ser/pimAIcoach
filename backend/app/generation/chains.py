@@ -130,6 +130,9 @@ async def rag_query(
         "question": question,
     })
 
+    # Log token usage if available
+    _log_token_usage(response, "rag_query")
+
     return {
         "answer": response.content,
         "sources": [
@@ -214,6 +217,24 @@ async def _condense_question(
         "question": question,
     })
     return result.content
+
+
+def _log_token_usage(response, label: str = "llm_call") -> None:
+    """Log token usage from LLM response metadata (if available)."""
+    try:
+        usage = getattr(response, "usage_metadata", None) or {}
+        if not usage and hasattr(response, "response_metadata"):
+            usage = response.response_metadata.get("usage", {})
+        if usage:
+            input_tokens = usage.get("input_tokens") or usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("output_tokens") or usage.get("completion_tokens", 0)
+            total = input_tokens + output_tokens
+            logger.info(
+                "Token usage [%s]: input=%d output=%d total=%d",
+                label, input_tokens, output_tokens, total,
+            )
+    except Exception:
+        pass  # Never fail on telemetry
 
 
 def _convert_chat_history(history: list[dict] | None) -> list:

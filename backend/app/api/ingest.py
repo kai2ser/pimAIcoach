@@ -98,6 +98,15 @@ async def ingest_from_url(request: IngestFromUrlRequest):
         )
 
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt"}
+
+
 @router.post("/ingest/file", response_model=IngestResponse)
 async def ingest_from_file(
     file: UploadFile = File(...),
@@ -114,7 +123,23 @@ async def ingest_from_file(
 ):
     """Ingest a document from a file upload."""
     try:
+        # Validate file extension
+        from pathlib import Path as _Path
+        ext = _Path(file.filename or "").suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            )
+
         content = await file.read()
+
+        # Validate file size
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large ({len(content) // (1024 * 1024)} MB). Maximum: {MAX_UPLOAD_SIZE // (1024 * 1024)} MB.",
+            )
         metadata = PolicyMetadata(
             record_id=record_id,
             country=country,
