@@ -3,6 +3,9 @@ Collection statistics endpoints — public summary of the RAG vector store.
 
   GET /api/stats        — aggregate totals (cached 60s)
   GET /api/stats/detail — per-country, per-tier, per-year breakdowns (cached 60s)
+
+Uses the shared cached SQLAlchemy engine to avoid creating new connection
+pools per request.
 """
 
 from __future__ import annotations
@@ -12,9 +15,10 @@ import time
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from app.config import settings
+from app.vectorstore.store import _get_pg_engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["stats"])
@@ -26,11 +30,17 @@ _cache: dict = {"data": None, "expires_at": 0.0}
 _detail_cache: dict = {"data": None, "expires_at": 0.0}
 
 
+def invalidate_stats_cache() -> None:
+    """Clear stats caches — call after ingestion or deletion."""
+    _cache["data"] = None
+    _cache["expires_at"] = 0.0
+    _detail_cache["data"] = None
+    _detail_cache["expires_at"] = 0.0
+
+
 # ── Models ───────────────────────────────────────────────────────────────────
 
 class CollectionStats(BaseModel):
-    """Summary statistics for the ingested document collection."""
-
     total_chunks: int
     total_documents: int
     total_tokens: int | None
@@ -59,8 +69,6 @@ class YearBreakdown(BaseModel):
 
 
 class DetailedStats(BaseModel):
-    """Rich breakdowns for the statistics dashboard."""
-
     summary: CollectionStats
     by_country: list[CountryBreakdown]
     by_tier: list[TierBreakdown]
@@ -72,8 +80,6 @@ class DetailedStats(BaseModel):
     retriever_type: str
 
 
-# ── Tier label map ───────────────────────────────────────────────────────────
-
 _TIER_LABELS = {
     1: "Primary Legislation",
     2: "Secondary Regulations",
@@ -82,46 +88,35 @@ _TIER_LABELS = {
 }
 
 
-# ── GET /api/stats ───────────────────────────────────────────────────────────
+# ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=CollectionStats)
 async def get_stats():
-    """
-    Return aggregate statistics about the vector store collection.
-    Results are cached for 60 seconds.
-    """
+    """Return aggregate statistics (cached 60s)."""
     now = time.monotonic()
     if _cache["data"] is not None and now < _cache["expires_at"]:
         return _cache["data"]
-
     result = _fetch_stats()
     _cache["data"] = result
     _cache["expires_at"] = now + _CACHE_TTL_SECONDS
     return result
 
 
-# ── GET /api/stats/detail ────────────────────────────────────────────────────
-
 @router.get("/stats/detail", response_model=DetailedStats)
 async def get_stats_detail():
-    """
-    Return detailed breakdowns by country, tier, and year.
-    Results are cached for 60 seconds.
-    """
+    """Return detailed breakdowns by country, tier, and year (cached 60s)."""
     now = time.monotonic()
     if _detail_cache["data"] is not None and now < _detail_cache["expires_at"]:
         return _detail_cache["data"]
-
     result = _fetch_detailed_stats()
     _detail_cache["data"] = result
     _detail_cache["expires_at"] = now + _CACHE_TTL_SECONDS
     return result
 
 
-# ── Queries ──────────────────────────────────────────────────────────────────
+# ── Shared helpers ───────────────────────────────────────────────────────────
 
 def _get_collection_uuid(conn) -> str | None:
-    """Resolve the langchain collection UUID."""
     row = conn.execute(
         text("SELECT uuid FROM langchain_pg_collection WHERE name = :name"),
         {"name": settings.collection_name},
@@ -129,21 +124,25 @@ def _get_collection_uuid(conn) -> str | None:
     return row[0] if row else None
 
 
-def _fetch_stats() -> CollectionStats:
-    """Execute the aggregate stats query."""
-    collection_name = settings.collection_name
-    engine = create_engine(settings.database_url)
+def _empty_summary() -> CollectionStats:
+    return CollectionStats(
+        total_chunks=0, total_documents=0, total_tokens=None,
+        lang_eng_documents=0, lang_ori_documents=0,
+        last_updated=None, collection_name=settings.collection_name,
+    )
 
+
+# ── Queries ──────────────────────────────────────────────────────────────────
+
+def _fetch_stats() -> CollectionStats:
+    engine = _get_pg_engine()
     with engine.connect() as conn:
         coll_uuid = _get_collection_uuid(conn)
         if coll_uuid is None:
-            return CollectionStats(
-                total_chunks=0, total_documents=0, total_tokens=None,
-                lang_eng_documents=0, lang_ori_documents=0,
-                last_updated=None, collection_name=collection_name,
-            )
+            return _empty_summary()
 
-        stats = conn.execute(
+        # Single consolidated query for summary + latest year
+        row = conn.execute(
             text("""
                 SELECT
                     COUNT(*)                                             AS total_chunks,
@@ -153,38 +152,29 @@ def _fetch_stats() -> CollectionStats:
                     COUNT(DISTINCT cmetadata->>'record_id')
                         FILTER (WHERE cmetadata->>'lang_type' = 'ENG')   AS lang_eng_documents,
                     COUNT(DISTINCT cmetadata->>'record_id')
-                        FILTER (WHERE cmetadata->>'lang_type' = 'ORI')   AS lang_ori_documents
+                        FILTER (WHERE cmetadata->>'lang_type' = 'ORI')   AS lang_ori_documents,
+                    MAX(cmetadata->>'year')
+                        FILTER (WHERE cmetadata->>'year' IS NOT NULL)    AS latest_year
                 FROM langchain_pg_embedding
                 WHERE collection_id = :coll_id
-            """),
-            {"coll_id": coll_uuid},
-        ).fetchone()
-
-        last_row = conn.execute(
-            text("""
-                SELECT MAX(cmetadata->>'year') AS latest_year
-                FROM langchain_pg_embedding
-                WHERE collection_id = :coll_id
-                  AND cmetadata->>'year' IS NOT NULL
             """),
             {"coll_id": coll_uuid},
         ).fetchone()
 
     return CollectionStats(
-        total_chunks=stats[0] or 0,
-        total_documents=stats[1] or 0,
-        total_tokens=stats[2],
-        lang_eng_documents=stats[3] or 0,
-        lang_ori_documents=stats[4] or 0,
-        last_updated=last_row[0] if last_row else None,
-        collection_name=collection_name,
+        total_chunks=row[0] or 0,
+        total_documents=row[1] or 0,
+        total_tokens=row[2],
+        lang_eng_documents=row[3] or 0,
+        lang_ori_documents=row[4] or 0,
+        last_updated=row[5],
+        collection_name=settings.collection_name,
     )
 
 
 def _fetch_detailed_stats() -> DetailedStats:
-    """Execute all breakdown queries."""
     summary = _fetch_stats()
-    engine = create_engine(settings.database_url)
+    engine = _get_pg_engine()
 
     by_country: list[CountryBreakdown] = []
     by_tier: list[TierBreakdown] = []
@@ -192,9 +182,8 @@ def _fetch_detailed_stats() -> DetailedStats:
 
     with engine.connect() as conn:
         coll_uuid = _get_collection_uuid(conn)
-
         if coll_uuid is not None:
-            # ── Per-country breakdown ──
+            # Per-country
             rows = conn.execute(
                 text("""
                     SELECT
@@ -210,16 +199,11 @@ def _fetch_detailed_stats() -> DetailedStats:
                 {"coll_id": coll_uuid},
             ).fetchall()
             by_country = [
-                CountryBreakdown(
-                    country=r[0] or "Unknown",
-                    country_name=r[1],
-                    documents=r[2],
-                    chunks=r[3],
-                )
+                CountryBreakdown(country=r[0] or "Unknown", country_name=r[1], documents=r[2], chunks=r[3])
                 for r in rows
             ]
 
-            # ── Per-tier breakdown ──
+            # Per-tier
             rows = conn.execute(
                 text("""
                     SELECT
@@ -234,15 +218,11 @@ def _fetch_detailed_stats() -> DetailedStats:
                 {"coll_id": coll_uuid},
             ).fetchall()
             by_tier = [
-                TierBreakdown(
-                    tier=r[0],
-                    label=_TIER_LABELS.get(r[0], f"Tier {r[0]}"),
-                    documents=r[1],
-                )
+                TierBreakdown(tier=r[0], label=_TIER_LABELS.get(r[0], f"Tier {r[0]}"), documents=r[1])
                 for r in rows
             ]
 
-            # ── Per-year breakdown ──
+            # Per-year
             rows = conn.execute(
                 text("""
                     SELECT
@@ -256,10 +236,7 @@ def _fetch_detailed_stats() -> DetailedStats:
                 """),
                 {"coll_id": coll_uuid},
             ).fetchall()
-            by_year = [
-                YearBreakdown(year=r[0], documents=r[1])
-                for r in rows
-            ]
+            by_year = [YearBreakdown(year=r[0], documents=r[1]) for r in rows]
 
     return DetailedStats(
         summary=summary,

@@ -9,6 +9,7 @@ Chain types (selected via config.chain_type):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import AsyncIterator
 
@@ -71,9 +72,10 @@ async def _invoke_llm(chain, inputs: dict):
 
 
 async def _retrieve_docs(retriever, question: str):
-    """Invoke the retriever with error wrapping."""
+    """Invoke the retriever in a thread to avoid blocking the event loop."""
     try:
-        return retriever.invoke(question)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, retriever.invoke, question)
     except Exception as e:
         logger.exception("Retriever error for question: %s", question)
         raise RuntimeError("Failed to search the document store. Please try again.") from e

@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 export interface Filters {
   country?: string;
   policy_guidance_tier?: number;
@@ -14,7 +16,7 @@ interface MetadataFiltersProps {
   onChange: (filters: Filters) => void;
 }
 
-export function MetadataFilters({ filters, onChange }: MetadataFiltersProps) {
+export const MetadataFilters = memo(function MetadataFilters({ filters, onChange }: MetadataFiltersProps) {
   const update = (key: keyof Filters, value: string | number | undefined) => {
     const next = { ...filters };
     if (value === "" || value === undefined) {
@@ -116,4 +118,4 @@ export function MetadataFilters({ filters, onChange }: MetadataFiltersProps) {
       </button>
     </div>
   );
-}
+});

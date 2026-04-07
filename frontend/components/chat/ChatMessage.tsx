@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { User, Bot } from "lucide-react";
 
 export interface Message {
@@ -6,7 +7,7 @@ export interface Message {
   content: string;
 }
 
-export function ChatMessage({ message }: { message: Message }) {
+export const ChatMessage = memo(function ChatMessage({ message }: { message: Message }) {
   const isUser = message.role === "user";
 
   return (
@@ -32,4 +33,4 @@ export function ChatMessage({ message }: { message: Message }) {
       )}
     </div>
   );
-}
+});

@@ -2,10 +2,12 @@
 Document loaders — load PDF, DOCX, and TXT files into LangChain Documents.
 
 Supports loading from local paths, URLs (Vercel Blob), or raw bytes.
+Uses try/finally for temp file cleanup to prevent orphaned files.
 """
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
 
@@ -18,6 +20,7 @@ from langchain_community.document_loaders import (
 )
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt"}
+MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 def load_from_path(file_path: str | Path) -> list[Document]:
@@ -37,11 +40,8 @@ def load_from_path(file_path: str | Path) -> list[Document]:
     return loader.load()
 
 
-MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
-
-
 async def load_from_url(url: str, filename: str | None = None) -> list[Document]:
-    """Download a document from a URL (e.g. Vercel Blob) and load it."""
+    """Download a document from a URL and load it without blocking the event loop."""
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.get(url, follow_redirects=True)
         response.raise_for_status()
@@ -51,24 +51,32 @@ async def load_from_url(url: str, filename: str | None = None) -> list[Document]
             )
 
     ext = _guess_extension(url, filename)
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp.write(response.content)
-        tmp_path = tmp.name
-
-    docs = load_from_path(tmp_path)
-    Path(tmp_path).unlink(missing_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(response.content)
+            tmp_path = tmp.name
+        # Run sync PDF/DOCX parsing in a thread to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        docs = await loop.run_in_executor(None, load_from_path, tmp_path)
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
     return docs
 
 
 def load_from_bytes(content: bytes, filename: str) -> list[Document]:
     """Load a document from raw bytes."""
     ext = Path(filename).suffix.lower()
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    docs = load_from_path(tmp_path)
-    Path(tmp_path).unlink(missing_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        docs = load_from_path(tmp_path)
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
     return docs
 
 

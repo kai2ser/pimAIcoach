@@ -120,3 +120,16 @@ async def health():
 
     overall = "ok" if status["database"] == "ok" else "degraded"
     return {"status": overall, **status}
+
+
+# ── Graceful shutdown ────────────────────────────────────────────────────────
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Dispose of connection pools on shutdown."""
+    try:
+        from app.vectorstore.store import _get_pg_engine
+        _get_pg_engine().dispose()
+        logger.info("Database connection pool disposed")
+    except Exception:
+        pass

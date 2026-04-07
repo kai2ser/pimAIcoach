@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { FileText } from "lucide-react";
 
 export interface Source {
@@ -20,7 +21,7 @@ const TIER_LABELS: Record<number, string> = {
   4: "Strategy",
 };
 
-export function SourceCards({ sources }: { sources: Source[] }) {
+export const SourceCards = memo(function SourceCards({ sources }: { sources: Source[] }) {
   if (sources.length === 0) return null;
 
   return (
@@ -57,4 +58,4 @@ export function SourceCards({ sources }: { sources: Source[] }) {
       </div>
     </div>
   );
-}
+});
