@@ -22,12 +22,21 @@ export const metadata: Metadata = {
     siteName: "PIM AI Coach",
     locale: "en_US",
     type: "website",
+    images: [
+      {
+        url: "/pim-pam-logo.png",
+        width: 512,
+        height: 512,
+        alt: "PIM PAM AI Coach",
+      },
+    ],
   },
   twitter: {
     card: "summary",
     title: "PIM AI Coach",
     description:
       "AI-powered coaching assistant for Public Investment Management",
+    images: ["/pim-pam-logo.png"],
   },
   icons: {
     icon: "/pim-pam-logo.png",

@@ -22,6 +22,14 @@ export function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamedAnswer = useRef("");
   const assistantMsgId = useRef("");
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any in-flight stream on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,6 +59,10 @@ export function ChatInterface() {
     streamedAnswer.current = "";
 
     try {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       const chatHistory = messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -69,6 +81,7 @@ export function ChatInterface() {
           filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
           stream: true,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -139,6 +152,7 @@ export function ChatInterface() {
         }
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       const errorText =
         error instanceof Error && error.message
           ? error.message
@@ -232,6 +246,16 @@ export function ChatInterface() {
         </div>
       )}
 
+      {/* Original-language mode indicator */}
+      {filters.lang_type === "ORI" && (
+        <div className="border-t border-[var(--border)] px-4 py-2">
+          <div className="mx-auto max-w-3xl rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            Original language mode — Please enter your question in the document&apos;s original language.
+            Responses will be generated in the same language as the source documents.
+          </div>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="border-t border-[var(--border)] px-4 py-3">
         <form
@@ -266,7 +290,11 @@ export function ChatInterface() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about PIM policies, regulations, or best practices..."
+            placeholder={
+              filters.lang_type === "ORI"
+                ? "Type your question in the original language..."
+                : "Ask about PIM policies, regulations, or best practices..."
+            }
             className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-4 py-2 text-sm outline-none focus:border-[var(--primary)]"
             disabled={isLoading}
           />

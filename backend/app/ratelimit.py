@@ -21,6 +21,14 @@ class RateLimiter:
         self.max_requests = max_requests
         self.window = window_seconds
         self._hits: dict[str, list[float]] = defaultdict(list)
+        self._check_count = 0
+
+    def _cleanup(self, now: float) -> None:
+        """Remove stale entries to prevent unbounded memory growth."""
+        cutoff = now - self.window
+        stale = [ip for ip, hits in self._hits.items() if not hits or hits[-1] < cutoff]
+        for ip in stale:
+            del self._hits[ip]
 
     def _client_ip(self, request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")
@@ -34,7 +42,7 @@ class RateLimiter:
         now = time.monotonic()
         cutoff = now - self.window
 
-        # Prune old hits
+        # Prune old hits for this IP
         hits = self._hits[ip] = [t for t in self._hits[ip] if t > cutoff]
 
         if len(hits) >= self.max_requests:
@@ -45,13 +53,11 @@ class RateLimiter:
 
         hits.append(now)
 
-    def cleanup(self) -> None:
-        """Remove stale entries (call periodically if memory is a concern)."""
-        now = time.monotonic()
-        cutoff = now - self.window
-        stale = [ip for ip, hits in self._hits.items() if not hits or hits[-1] < cutoff]
-        for ip in stale:
-            del self._hits[ip]
+        # Periodic cleanup: every 100 checks, purge stale IPs
+        self._check_count += 1
+        if self._check_count >= 100:
+            self._check_count = 0
+            self._cleanup(now)
 
 
 # Shared instances for different endpoint groups

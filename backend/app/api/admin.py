@@ -103,13 +103,21 @@ async def update_config(update: RAGConfigUpdate):
     # Clear LRU caches if relevant fields changed
     cache_breaking_fields = {
         "embedding_model", "embedding_model_name",
-        "vector_store", "collection_name",
+        "vector_store", "collection_name", "database_url",
         "llm_provider", "llm_model", "llm_temperature", "llm_max_tokens",
     }
     if cache_breaking_fields & set(updated_fields.keys()):
         get_embeddings.cache_clear()
         get_vector_store.cache_clear()
         get_llm.cache_clear()
+        # Also clear engine cache and dispose old pool if DB URL changed
+        if "database_url" in updated_fields:
+            from app.vectorstore.store import _get_pg_engine
+            try:
+                _get_pg_engine().dispose()
+            except Exception:
+                pass
+            _get_pg_engine.cache_clear()
 
     logger.info("Config updated: %s", list(updated_fields.keys()))
     return await get_config()

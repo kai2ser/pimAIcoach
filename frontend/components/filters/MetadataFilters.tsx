@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useState } from "react";
+import { fetchWithRetry } from "@/lib/utils";
 
 export interface Filters {
   country?: string;
@@ -21,14 +22,32 @@ interface MetadataFiltersProps {
   onChange: (filters: Filters) => void;
 }
 
+// Module-level cache to avoid re-fetching countries on every mount
+let _countriesCache: Country[] | null = null;
+let _countriesFetchPromise: Promise<Country[]> | null = null;
+
+function fetchCountries(): Promise<Country[]> {
+  if (_countriesCache) return Promise.resolve(_countriesCache);
+  if (_countriesFetchPromise) return _countriesFetchPromise;
+  _countriesFetchPromise = fetchWithRetry("/api/coach/countries")
+    .then((res) => (res.ok ? res.json() : []))
+    .then((data: Country[]) => {
+      _countriesCache = data;
+      _countriesFetchPromise = null;
+      return data;
+    })
+    .catch(() => {
+      _countriesFetchPromise = null;
+      return [] as Country[];
+    });
+  return _countriesFetchPromise;
+}
+
 export const MetadataFilters = memo(function MetadataFilters({ filters, onChange }: MetadataFiltersProps) {
-  const [countries, setCountries] = useState<Country[]>([]);
+  const [countries, setCountries] = useState<Country[]>(_countriesCache || []);
 
   useEffect(() => {
-    fetch("/api/coach/countries")
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: Country[]) => setCountries(data))
-      .catch(() => setCountries([]));
+    fetchCountries().then(setCountries);
   }, []);
 
   const update = (key: keyof Filters, value: string | number | undefined) => {

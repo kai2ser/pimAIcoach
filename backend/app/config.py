@@ -81,6 +81,12 @@ class RAGConfig(BaseSettings):
         description="RAG chain type: 'stuff' | 'map_reduce' | 'refine'",
     )
 
+    # -- Policy Repository API -------------------------------------------------
+    policy_repo_api_url: str = Field(
+        default="https://pim-policyrepository4.vercel.app/api/export/documents",
+        description="URL of the policy repository export API",
+    )
+
     # -- Database (Neon / PostgreSQL) ------------------------------------------
     database_url: str = Field(
         default="",

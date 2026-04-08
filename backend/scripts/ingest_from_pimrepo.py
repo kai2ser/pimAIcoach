@@ -24,7 +24,7 @@ import sys
 from app.config import settings
 from app.ingestion.metadata import PolicyMetadata
 from app.ingestion.pipeline import ingest_document
-from app.ingestion.repo_source import fetch_records_with_docs, resolve_country_name
+from app.ingestion.repo_source import fetch_records_with_docs_sync as fetch_records_with_docs
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,7 +60,7 @@ async def ingest_records(
             )
             continue
 
-        country_name = resolve_country_name(record["country"])
+        country_name = record.get("country_name") or record["country"]
 
         for doc in record["documents"]:
             doc_label = (

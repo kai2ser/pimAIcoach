@@ -1,96 +1,166 @@
 """
-Query the pimrepository Neon database for policy records and their documents.
+Fetch policy records and their documents from the PIM Policy Repository
+export API.
 
-Uses a single JOIN query to avoid N+1 patterns, and caches country name
-lookups for the lifetime of the process.
+Replaces the previous direct-database approach with an HTTP call to the
+repository's public export endpoint, converting the camelCase JSON
+response to the snake_case convention used throughout this codebase.
 """
 
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
-from functools import lru_cache
 
-import psycopg
+import asyncio
+
+import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# -- camelCase → snake_case field mappings --------------------------------- #
 
-def fetch_records_with_docs(
+_RECORD_FIELD_MAP = {
+    "id": "id",
+    "country": "country",
+    "countryName": "country_name",
+    "nameEng": "name_eng",
+    "nameOrig": "name_orig",
+    "year": "year",
+    "source": "source",
+    "yearRevised": "year_revised",
+    "overview": "overview",
+    "policyGuidanceTier": "policy_guidance_tier",
+    "strategyTier": "strategy_tier",
+    "link": "link",
+    "pages": "pages",
+    "tokens": "tokens",
+}
+
+_DOC_FIELD_MAP = {
+    "id": "id",
+    "recordId": "record_id",
+    "langType": "lang_type",
+    "langCode": "lang_code",
+    "langLabel": "lang_label",
+    "blobUrl": "blob_url",
+    "fileName": "file_name",
+    "fileSize": "file_size",
+}
+
+
+def _map_record(api_record: dict) -> dict:
+    """Convert a single API record from camelCase to snake_case."""
+    record = {
+        snake: api_record.get(camel)
+        for camel, snake in _RECORD_FIELD_MAP.items()
+    }
+    record["documents"] = [
+        {snake: doc.get(camel) for camel, snake in _DOC_FIELD_MAP.items()}
+        for doc in api_record.get("documents", [])
+    ]
+    return record
+
+
+async def fetch_records_with_docs(
+    lang: str | None = "ENG",
     country: str | None = None,
     record_id: str | None = None,
 ) -> list[dict]:
-    """Query pimrepository DB for records and their documents using a single JOIN."""
-    with psycopg.connect(settings.database_url) as conn:
-        with conn.cursor() as cur:
-            query = """
-                SELECT
-                    r.id, r.country, r.name_eng, r.name_orig,
-                    r.year, r.source, r.year_revised, r.overview,
-                    r.policy_guidance_tier, r.strategy_tier,
-                    r.link, r.pages, r.tokens,
-                    d.id AS doc_id, d.lang_type, d.lang_code, d.lang_label,
-                    d.blob_url, d.file_name, d.file_size
-                FROM policy_records r
-                LEFT JOIN documents d ON d.record_id = r.id::text
-                WHERE 1=1
-            """
-            params: list = []
+    """Fetch policy records from the PIM Policy Repository export API.
 
-            if record_id:
-                query += " AND r.id = %s"
-                params.append(record_id)
-            elif country:
-                query += " AND (r.country ILIKE %s OR r.country = %s)"
-                params.extend([f"%{country}%", country])
+    Args:
+        lang: Language filter sent to the API ("ENG", "ORI", or None for all).
+        country: Optional client-side filter by ISO3 country code.
+        record_id: Optional client-side filter by record id.
 
-            query += " ORDER BY r.country, r.name_eng, d.lang_type"
-            cur.execute(query, params)
+    Returns:
+        List of record dicts (snake_case keys), each with a ``documents``
+        list — the same shape the rest of the pipeline expects.
+    """
+    params: dict[str, str] = {}
+    if lang:
+        params["lang"] = lang
 
-            columns = [desc[0] for desc in cur.description]
-            rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+    url = settings.policy_repo_api_url
+    logger.info("Fetching records from %s (params=%s)", url, params)
 
-    # Group rows by record (many docs per record from the JOIN)
-    record_cols = {
-        "id", "country", "name_eng", "name_orig", "year", "source",
-        "year_revised", "overview", "policy_guidance_tier", "strategy_tier",
-        "link", "pages", "tokens",
-    }
-    doc_col_map = {
-        "doc_id": "id", "lang_type": "lang_type", "lang_code": "lang_code",
-        "lang_label": "lang_label", "blob_url": "blob_url",
-        "file_name": "file_name", "file_size": "file_size",
-    }
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(url, params=params, follow_redirects=True)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise RuntimeError(
+            f"Failed to fetch records from policy repository API: {exc}"
+        ) from exc
 
-    records_by_id: dict[str, dict] = {}
-    for row in rows:
-        rid = str(row["id"])
-        if rid not in records_by_id:
-            records_by_id[rid] = {
-                k: row[k] for k in record_cols if k in row
-            }
-            records_by_id[rid]["documents"] = []
+    data = response.json()
+    api_records = data.get("records", [])
 
-        # Add document if present (LEFT JOIN can produce NULL doc rows)
-        if row.get("doc_id") is not None:
-            doc = {v: row[k] for k, v in doc_col_map.items() if k in row}
-            records_by_id[rid]["documents"].append(doc)
+    records = [_map_record(r) for r in api_records]
+    logger.info(
+        "Fetched %d records (%d from API, lang=%s)",
+        len(records), data.get("count", "?"), lang,
+    )
 
-    return list(records_by_id.values())
+    # Client-side filtering (country / record_id) — the API doesn't
+    # support these query params, so we filter after fetch.
+    if record_id:
+        records = [r for r in records if str(r["id"]) == str(record_id)]
+    elif country:
+        country_upper = country.upper()
+        records = [
+            r for r in records
+            if (r.get("country") or "").upper() == country_upper
+        ]
+
+    return records
 
 
-@lru_cache(maxsize=256)
-def resolve_country_name(country_code_or_name: str) -> str | None:
-    """Look up full country name from the countries table (cached)."""
-    with psycopg.connect(settings.database_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT name FROM countries WHERE iso3 = %s",
-                [country_code_or_name.upper()],
-            )
-            row = cur.fetchone()
-            if row:
-                return row[0]
-            return country_code_or_name
+def fetch_records_with_docs_sync(
+    lang: str | None = "ENG",
+    country: str | None = None,
+    record_id: str | None = None,
+) -> list[dict]:
+    """Synchronous wrapper for use in non-async contexts (e.g. scripts)."""
+    params: dict[str, str] = {}
+    if lang:
+        params["lang"] = lang
+
+    url = settings.policy_repo_api_url
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            response = client.get(url, params=params, follow_redirects=True)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise RuntimeError(
+            f"Failed to fetch records from policy repository API: {exc}"
+        ) from exc
+
+    data = response.json()
+    records = [_map_record(r) for r in data.get("records", [])]
+
+    if record_id:
+        records = [r for r in records if str(r["id"]) == str(record_id)]
+    elif country:
+        country_upper = country.upper()
+        records = [
+            r for r in records
+            if (r.get("country") or "").upper() == country_upper
+        ]
+
+    return records
+
+
+async def resolve_country_name(country_code: str) -> str | None:
+    """Look up full country name by fetching records for the given ISO3 code.
+
+    Returns the country name from the first matching record, or the original
+    code if no records are found.
+    """
+    records = await fetch_records_with_docs(lang=None, country=country_code)
+    if records:
+        return records[0].get("country_name") or country_code
+    return country_code

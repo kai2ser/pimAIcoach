@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
-import psycopg
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -49,36 +49,54 @@ class ExportRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────
 
-def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data)}\n\n"
+from app.api import sse_event as _sse
 
+
+_profile_llm_cache = None
 
 def _get_profile_llm():
-    """Return a ChatAnthropic instance with higher max_tokens for profile generation."""
-    from langchain_anthropic import ChatAnthropic
-
-    return ChatAnthropic(
-        model=settings.llm_model,
-        temperature=settings.llm_temperature,
-        max_tokens=_PROFILE_MAX_TOKENS,
-        anthropic_api_key=settings.anthropic_api_key,
-    )
+    """Return a cached ChatAnthropic instance with higher max_tokens for profile generation."""
+    global _profile_llm_cache
+    if _profile_llm_cache is None:
+        from langchain_anthropic import ChatAnthropic
+        _profile_llm_cache = ChatAnthropic(
+            model=settings.llm_model,
+            temperature=settings.llm_temperature,
+            max_tokens=_PROFILE_MAX_TOKENS,
+            anthropic_api_key=settings.anthropic_api_key,
+        )
+    return _profile_llm_cache
 
 
 # ── GET /api/countries ────────────────────────────────────────
 
+_countries_cache: dict = {"data": None, "expires_at": 0.0}
+_COUNTRIES_CACHE_TTL = 300  # 5 minutes
+
+
 @router.get("/countries")
 async def list_countries():
-    """Return all countries from the pimrepository database."""
+    """Return all countries derived from the policy repository API (cached 5m)."""
+    now = time.monotonic()
+    if _countries_cache["data"] is not None and now < _countries_cache["expires_at"]:
+        return _countries_cache["data"]
+
     try:
-        with psycopg.connect(settings.database_url) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT iso3, name FROM countries ORDER BY name")
-                return [
-                    {"iso3": row[0], "name": row[1]}
-                    for row in cur.fetchall()
-                ]
-    except Exception as e:
+        records = await fetch_records_with_docs(lang=None)
+        seen: dict[str, str] = {}
+        for r in records:
+            iso3 = r.get("country")
+            name = r.get("country_name") or iso3
+            if iso3 and iso3 not in seen:
+                seen[iso3] = name
+        result = sorted(
+            [{"iso3": k, "name": v} for k, v in seen.items()],
+            key=lambda c: c["name"],
+        )
+        _countries_cache["data"] = result
+        _countries_cache["expires_at"] = now + _COUNTRIES_CACHE_TTL
+        return result
+    except Exception:
         logger.exception("Failed to fetch countries")
         raise HTTPException(status_code=500, detail="Could not load countries")
 
@@ -99,11 +117,11 @@ async def _profile_stream(country_iso3: str):
     """Generator that builds context, calls the LLM, and yields SSE events."""
     try:
         # 1. Resolve country name
-        country_name = resolve_country_name(country_iso3) or country_iso3
+        country_name = await resolve_country_name(country_iso3) or country_iso3
         yield _sse({"type": "status", "data": f"Preparing profile for {country_name}..."})
 
         # 2. Fetch structured policy records
-        records = fetch_records_with_docs(country=country_iso3)
+        records = await fetch_records_with_docs(country=country_iso3)
         policy_context = format_policy_records_context(records)
 
         yield _sse({

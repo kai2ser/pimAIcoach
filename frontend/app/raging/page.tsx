@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SkeletonGrid } from "@/components/Skeleton";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 interface CollectionStats {
   total_chunks: number;
@@ -280,26 +281,7 @@ export default function RagingPage() {
           >
             {reindexing && activeFilter === "all" ? (
               <>
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
+                <LoadingSpinner />
                 Re-indexing…
               </>
             ) : (
@@ -314,26 +296,7 @@ export default function RagingPage() {
           >
             {reindexing && activeFilter === "eng" ? (
               <>
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
+                <LoadingSpinner />
                 Re-indexing…
               </>
             ) : (

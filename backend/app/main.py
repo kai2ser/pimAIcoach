@@ -121,20 +121,43 @@ app.include_router(country_transparency_router, prefix="/api")
 @app.get("/health")
 async def health():
     """Basic health check — reports whether the app and database are reachable."""
-    from app.config import settings
+    from sqlalchemy import text as sa_text
     status = {"app": "ok", "database": "unknown"}
 
     try:
-        import psycopg
-        with psycopg.connect(settings.database_url, connect_timeout=5) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
+        from app.vectorstore.store import _get_pg_engine
+        engine = _get_pg_engine()
+        with engine.connect() as conn:
+            conn.execute(sa_text("SELECT 1"))
         status["database"] = "ok"
     except Exception:
         status["database"] = "unreachable"
 
     overall = "ok" if status["database"] == "ok" else "degraded"
     return {"status": overall, **status}
+
+
+# ── Startup — ensure DB indexes ─────────────────────────────────────────────
+
+@app.on_event("startup")
+async def startup():
+    """Create GIN index on cmetadata for fast filtering/stats queries (idempotent)."""
+    from app.config import settings as _settings
+    if not _settings.database_url:
+        return
+    try:
+        from app.vectorstore.store import _get_pg_engine
+        from sqlalchemy import text as sa_text
+        engine = _get_pg_engine()
+        with engine.connect() as conn:
+            conn.execute(sa_text(
+                "CREATE INDEX IF NOT EXISTS idx_embedding_cmetadata "
+                "ON langchain_pg_embedding USING gin (cmetadata);"
+            ))
+            conn.commit()
+        logger.info("GIN index on cmetadata ensured")
+    except Exception:
+        logger.debug("Could not ensure GIN index (table may not exist yet)")
 
 
 # ── Graceful shutdown ────────────────────────────────────────────────────────

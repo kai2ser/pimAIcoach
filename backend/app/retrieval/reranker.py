@@ -9,6 +9,8 @@ Strategies (selected via config.reranker):
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from langchain_core.documents import Document
 
 from app.config import settings
@@ -52,12 +54,16 @@ def _cohere_rerank(
     return list(results)
 
 
+@lru_cache(maxsize=1)
+def _get_cross_encoder():
+    from sentence_transformers import CrossEncoder
+    return CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+
 def _cross_encoder_rerank(
     query: str, documents: list[Document], top_k: int
 ) -> list[Document]:
-    from sentence_transformers import CrossEncoder
-
-    model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    model = _get_cross_encoder()
     pairs = [(query, doc.page_content) for doc in documents]
     scores = model.predict(pairs)
 

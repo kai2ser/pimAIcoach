@@ -7,6 +7,8 @@ the LLM in PIM best practices and retrieved policy documents.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 SYSTEM_PROMPT = """\
@@ -28,7 +30,7 @@ When answering questions:
 5. If the context does not contain enough information, say so clearly and suggest
    what additional documents or topics the user might explore.
 6. Use clear, professional language appropriate for a government policy audience.
-
+{language_instruction}
 {context_instruction}"""
 
 CONTEXT_INSTRUCTION_WITH_DOCS = """\
@@ -43,7 +45,21 @@ No specific policy documents were retrieved for this question.
 Answer based on your general knowledge of PIM best practices, and note that
 the answer is not grounded in specific policy documents from the database."""
 
+# -- Language instructions ------------------------------------------------- #
 
+LANGUAGE_INSTRUCTION_DEFAULT = ""
+
+LANGUAGE_INSTRUCTION_ORIGINAL = """
+IMPORTANT: The user is working with original-language policy documents.
+- The retrieved documents are in their original language (not English).
+- The user's question is in the original language.
+- You MUST respond in the same language as the retrieved documents.
+- Cite document titles using their original names (name_orig) when available.
+- If documents are in multiple languages, respond in the language that matches
+  the majority of retrieved documents."""
+
+
+@lru_cache(maxsize=1)
 def get_rag_prompt() -> ChatPromptTemplate:
     """Prompt template for RAG Q&A with retrieved context."""
     return ChatPromptTemplate.from_messages([
@@ -53,6 +69,7 @@ def get_rag_prompt() -> ChatPromptTemplate:
     ])
 
 
+@lru_cache(maxsize=1)
 def get_condense_prompt() -> ChatPromptTemplate:
     """Prompt to condense chat history + follow-up into a standalone question."""
     return ChatPromptTemplate.from_messages([
@@ -65,8 +82,21 @@ def get_condense_prompt() -> ChatPromptTemplate:
     ])
 
 
+@lru_cache(maxsize=1)
+def _get_tokenizer():
+    """Return a cached tiktoken encoder for accurate token counting."""
+    try:
+        import tiktoken
+        return tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        return None
+
+
 def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~4 characters per token for English text."""
+    """Count tokens using tiktoken when available, else fall back to heuristic."""
+    enc = _get_tokenizer()
+    if enc is not None:
+        return len(enc.encode(text, disallowed_special=()))
     return len(text) // 4
 
 
@@ -100,9 +130,17 @@ def format_documents(docs, max_context_tokens: int = _MAX_CONTEXT_TOKENS) -> str
         tier = meta.get("policy_guidance_tier")
         tier_label = {1: "Legislation", 2: "Regulation", 3: "Guidelines", 4: "Strategy"}.get(tier, "")
 
+        lang_info = ""
+        if meta.get("lang_type"):
+            lang_info = f" [{meta['lang_type']}"
+            if meta.get("lang_code"):
+                lang_info += f"/{meta['lang_code']}"
+            lang_info += "]"
+
         block = (
             f"[{i}] {header}"
             + (f" ({tier_label})" if tier_label else "")
+            + lang_info
             + f"\n{doc.page_content}"
         )
 

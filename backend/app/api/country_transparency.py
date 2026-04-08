@@ -47,20 +47,23 @@ class TransparencyExportRequest(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────
 
-def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data)}\n\n"
+from app.api import sse_event as _sse
 
+
+_transparency_llm_cache = None
 
 def _get_transparency_llm():
-    """Return a ChatAnthropic instance with higher max_tokens for briefing generation."""
-    from langchain_anthropic import ChatAnthropic
-
-    return ChatAnthropic(
-        model=settings.llm_model,
-        temperature=settings.llm_temperature,
-        max_tokens=_TRANSPARENCY_MAX_TOKENS,
-        anthropic_api_key=settings.anthropic_api_key,
-    )
+    """Return a cached ChatAnthropic instance with higher max_tokens for briefing generation."""
+    global _transparency_llm_cache
+    if _transparency_llm_cache is None:
+        from langchain_anthropic import ChatAnthropic
+        _transparency_llm_cache = ChatAnthropic(
+            model=settings.llm_model,
+            temperature=settings.llm_temperature,
+            max_tokens=_TRANSPARENCY_MAX_TOKENS,
+            anthropic_api_key=settings.anthropic_api_key,
+        )
+    return _transparency_llm_cache
 
 
 # ── POST /api/country-transparency ───────────────────────────
@@ -79,11 +82,11 @@ async def _transparency_stream(country_iso3: str):
     """Generator that builds context, calls the LLM, and yields SSE events."""
     try:
         # 1. Resolve country name
-        country_name = resolve_country_name(country_iso3) or country_iso3
+        country_name = await resolve_country_name(country_iso3) or country_iso3
         yield _sse({"type": "status", "data": f"Preparing transparency briefing for {country_name}..."})
 
         # 2. Fetch structured policy records
-        records = fetch_records_with_docs(country=country_iso3)
+        records = await fetch_records_with_docs(country=country_iso3)
         policy_context = format_transparency_records_context(records)
 
         yield _sse({

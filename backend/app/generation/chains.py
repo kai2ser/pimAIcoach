@@ -31,6 +31,8 @@ from app.generation.prompts import (
     format_documents,
     CONTEXT_INSTRUCTION_WITH_DOCS,
     CONTEXT_INSTRUCTION_NO_DOCS,
+    LANGUAGE_INSTRUCTION_DEFAULT,
+    LANGUAGE_INSTRUCTION_ORIGINAL,
 )
 from app.retrieval.retriever import get_retriever
 from app.retrieval.reranker import rerank
@@ -86,6 +88,7 @@ async def rag_query(
     chat_history: list[dict] | None = None,
     filters: dict | None = None,
     retriever_strategy: str | None = None,
+    response_language: str | None = None,
 ) -> dict:
     """
     Execute a full RAG query: retrieve → (rerank) → generate.
@@ -111,7 +114,8 @@ async def rag_query(
 
     # Rerank (if configured)
     if settings.reranker:
-        docs = rerank(standalone_question, docs)
+        loop = asyncio.get_event_loop()
+        docs = await loop.run_in_executor(None, rerank, standalone_question, docs)
         logger.info("Reranked to %d documents", len(docs))
 
     # Generate
@@ -121,6 +125,10 @@ async def rag_query(
         if docs
         else CONTEXT_INSTRUCTION_NO_DOCS
     )
+    language_instruction = (
+        LANGUAGE_INSTRUCTION_ORIGINAL if response_language == "ORI"
+        else LANGUAGE_INSTRUCTION_DEFAULT
+    )
 
     prompt = get_rag_prompt()
     llm = get_llm()
@@ -128,6 +136,7 @@ async def rag_query(
     chain = prompt | llm
     response = await _invoke_llm(chain, {
         "context_instruction": context_instruction,
+        "language_instruction": language_instruction,
         "chat_history": lc_history,
         "question": question,
     })
@@ -152,6 +161,7 @@ async def rag_query_stream(
     chat_history: list[dict] | None = None,
     filters: dict | None = None,
     retriever_strategy: str | None = None,
+    response_language: str | None = None,
 ) -> AsyncIterator[dict]:
     """
     Streaming version of rag_query. Yields chunks as they are generated.
@@ -190,6 +200,10 @@ async def rag_query_stream(
         if docs
         else CONTEXT_INSTRUCTION_NO_DOCS
     )
+    language_instruction = (
+        LANGUAGE_INSTRUCTION_ORIGINAL if response_language == "ORI"
+        else LANGUAGE_INSTRUCTION_DEFAULT
+    )
 
     prompt = get_rag_prompt()
     llm = get_llm()
@@ -197,6 +211,7 @@ async def rag_query_stream(
 
     async for chunk in chain.astream({
         "context_instruction": context_instruction,
+        "language_instruction": language_instruction,
         "chat_history": lc_history,
         "question": question,
     }):

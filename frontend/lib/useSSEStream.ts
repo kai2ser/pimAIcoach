@@ -5,7 +5,7 @@
  * CountryProfile, CountryTransparency, and RAGing pages.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface SSEEvent {
   type: "status" | "token" | "source" | "error" | "done" | "progress" | "complete";
@@ -43,8 +43,21 @@ export function useSSEStream({ onEvent, onDone }: UseSSEStreamOptions): UseSSESt
   onEventRef.current = onEvent;
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any in-flight stream on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const startStream = useCallback(async (url: string, body: unknown) => {
+    // Abort previous stream if still running
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setIsStreaming(true);
     setError(null);
 
@@ -53,6 +66,7 @@ export function useSSEStream({ onEvent, onDone }: UseSSEStreamOptions): UseSSESt
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -94,8 +108,12 @@ export function useSSEStream({ onEvent, onDone }: UseSSEStreamOptions): UseSSESt
       }
 
       onDoneRef.current?.();
-    } catch {
-      setError("Connection lost. Please try again.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // Intentional abort — not an error
+      } else {
+        setError("Connection lost. Please try again.");
+      }
     } finally {
       setIsStreaming(false);
     }

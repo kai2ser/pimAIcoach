@@ -186,60 +186,62 @@ def _fetch_detailed_stats() -> DetailedStats:
     with engine.connect() as conn:
         coll_uuid = _get_collection_uuid(conn)
         if coll_uuid is not None:
-            # Per-country
+            # Single query with UNION ALL for all three breakdowns
             rows = conn.execute(
                 text("""
-                    SELECT
-                        cmetadata->>'country'      AS country,
-                        cmetadata->>'country_name'  AS country_name,
-                        COUNT(DISTINCT cmetadata->>'record_id') AS documents,
-                        COUNT(*)                     AS chunks
+                    SELECT 'country' AS dim,
+                           cmetadata->>'country' AS key1,
+                           cmetadata->>'country_name' AS key2,
+                           COUNT(DISTINCT cmetadata->>'record_id') AS documents,
+                           COUNT(*) AS chunks
                     FROM langchain_pg_embedding
                     WHERE collection_id = :coll_id
                     GROUP BY cmetadata->>'country', cmetadata->>'country_name'
-                    ORDER BY documents DESC
-                """),
-                {"coll_id": coll_uuid},
-            ).fetchall()
-            by_country = [
-                CountryBreakdown(country=r[0] or "Unknown", country_name=r[1], documents=r[2], chunks=r[3])
-                for r in rows
-            ]
 
-            # Per-tier
-            rows = conn.execute(
-                text("""
-                    SELECT
-                        (cmetadata->>'policy_guidance_tier')::int AS tier,
-                        COUNT(DISTINCT cmetadata->>'record_id')  AS documents
+                    UNION ALL
+
+                    SELECT 'tier' AS dim,
+                           cmetadata->>'policy_guidance_tier' AS key1,
+                           NULL AS key2,
+                           COUNT(DISTINCT cmetadata->>'record_id') AS documents,
+                           0 AS chunks
                     FROM langchain_pg_embedding
                     WHERE collection_id = :coll_id
                       AND cmetadata->>'policy_guidance_tier' IS NOT NULL
-                    GROUP BY (cmetadata->>'policy_guidance_tier')::int
-                    ORDER BY tier
-                """),
-                {"coll_id": coll_uuid},
-            ).fetchall()
-            by_tier = [
-                TierBreakdown(tier=r[0], label=_TIER_LABELS.get(r[0], f"Tier {r[0]}"), documents=r[1])
-                for r in rows
-            ]
+                    GROUP BY cmetadata->>'policy_guidance_tier'
 
-            # Per-year
-            rows = conn.execute(
-                text("""
-                    SELECT
-                        cmetadata->>'year'                       AS year,
-                        COUNT(DISTINCT cmetadata->>'record_id')  AS documents
+                    UNION ALL
+
+                    SELECT 'year' AS dim,
+                           cmetadata->>'year' AS key1,
+                           NULL AS key2,
+                           COUNT(DISTINCT cmetadata->>'record_id') AS documents,
+                           0 AS chunks
                     FROM langchain_pg_embedding
                     WHERE collection_id = :coll_id
                       AND cmetadata->>'year' IS NOT NULL
                     GROUP BY cmetadata->>'year'
-                    ORDER BY cmetadata->>'year'
                 """),
                 {"coll_id": coll_uuid},
             ).fetchall()
-            by_year = [YearBreakdown(year=r[0], documents=r[1]) for r in rows]
+
+            for r in rows:
+                dim = r[0]
+                if dim == "country":
+                    by_country.append(
+                        CountryBreakdown(country=r[1] or "Unknown", country_name=r[2], documents=r[3], chunks=r[4])
+                    )
+                elif dim == "tier":
+                    tier_val = int(r[1]) if r[1] else None
+                    by_tier.append(
+                        TierBreakdown(tier=tier_val, label=_TIER_LABELS.get(tier_val, f"Tier {tier_val}"), documents=r[3])
+                    )
+                elif dim == "year":
+                    by_year.append(YearBreakdown(year=r[1], documents=r[3]))
+
+            by_country.sort(key=lambda x: x.documents, reverse=True)
+            by_tier.sort(key=lambda x: x.tier or 0)
+            by_year.sort(key=lambda x: x.year or "")
 
     return DetailedStats(
         summary=summary,

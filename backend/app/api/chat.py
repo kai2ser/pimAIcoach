@@ -55,9 +55,14 @@ async def chat(request: ChatRequest, raw_request: Request):
     """Ask a question to the PIM AI Coach."""
     chat_limiter.check(raw_request)
     try:
+        # Derive response language from lang_type filter
+        response_language = None
+        if request.filters and request.filters.get("lang_type") == "ORI":
+            response_language = "ORI"
+
         if request.stream:
             return StreamingResponse(
-                _stream_response(request),
+                _stream_response(request, response_language),
                 media_type="text/event-stream",
             )
 
@@ -66,6 +71,7 @@ async def chat(request: ChatRequest, raw_request: Request):
             chat_history=[msg.model_dump() for msg in request.chat_history],
             filters=request.filters,
             retriever_strategy=request.retriever_strategy,
+            response_language=response_language,
         )
         return ChatResponse(**result)
 
@@ -77,7 +83,7 @@ async def chat(request: ChatRequest, raw_request: Request):
         )
 
 
-async def _stream_response(request: ChatRequest):
+async def _stream_response(request: ChatRequest, response_language: str | None = None):
     """Server-Sent Events stream for chat responses."""
     try:
         async for chunk in rag_query_stream(
@@ -85,6 +91,7 @@ async def _stream_response(request: ChatRequest):
             chat_history=[msg.model_dump() for msg in request.chat_history],
             filters=request.filters,
             retriever_strategy=request.retriever_strategy,
+            response_language=response_language,
         ):
             yield f"data: {json.dumps(chunk)}\n\n"
     except Exception as e:

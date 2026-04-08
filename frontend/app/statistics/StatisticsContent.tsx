@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import {
   BarChart,
   Bar,
@@ -71,7 +72,11 @@ export default function StatisticsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  function fetchData() {
+  const fetchingRef = useRef(false);
+
+  const fetchData = useCallback(() => {
+    if (fetchingRef.current) return; // debounce: ignore if already fetching
+    fetchingRef.current = true;
     setLoading(true);
     setError(null);
     fetch("/api/coach/stats/detail")
@@ -81,22 +86,22 @@ export default function StatisticsContent() {
       })
       .then((d: DetailedStats) => setData(d))
       .catch(() => setError("Failed to load statistics. Please try again."))
-      .finally(() => setLoading(false));
-  }
+      .finally(() => {
+        setLoading(false);
+        fetchingRef.current = false;
+      });
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16">
         <h2 className="mb-6 text-3xl font-bold">Vector Database Analytics</h2>
         <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-          <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
+          <LoadingSpinner />
           Loading statistics&hellip;
         </div>
       </div>
