@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useSSEStream, type SSEEvent } from "@/lib/useSSEStream";
@@ -29,13 +29,7 @@ export default function CountryTransparencyPage() {
   const [exporting, setExporting] = useState<"docx" | "pdf" | null>(null);
 
   // Accumulated content ref to avoid stale closure in onEvent
-  const contentRef = useCallback(() => {
-    let acc = "";
-    return {
-      reset: () => { acc = ""; },
-      append: (text: string) => { acc += text; return acc; },
-    };
-  }, [])();
+  const accRef = useRef("");
 
   const { startStream, isStreaming } = useSSEStream({
     onEvent: (event: SSEEvent) => {
@@ -44,7 +38,8 @@ export default function CountryTransparencyPage() {
           setStatusMsg(event.data as string);
           break;
         case "token":
-          setReportContent(contentRef.append(event.data as string));
+          accRef.current += event.data as string;
+          setReportContent(accRef.current);
           break;
         case "error":
           setError(event.data as string);
@@ -87,7 +82,7 @@ export default function CountryTransparencyPage() {
     setReportContent("");
     setError(null);
     setStatusMsg(null);
-    contentRef.reset();
+    accRef.current = "";
 
     await startStream("/api/coach/country-transparency", {
       country_iso3: selectedIso3,
