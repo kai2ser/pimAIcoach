@@ -18,6 +18,7 @@ export default function CountryTransparencyPage() {
   const [countriesError, setCountriesError] = useState<string | null>(null);
   const [selectedIso3, setSelectedIso3] = useState("");
   const [selectedName, setSelectedName] = useState("");
+  const [langType, setLangType] = useState<"ENG" | "ORI">("ENG");
 
   // Generation state
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -90,6 +91,7 @@ export default function CountryTransparencyPage() {
 
     await startStream("/api/coach/country-transparency", {
       country_iso3: selectedIso3,
+      lang_type: langType,
     });
   }
 
@@ -185,6 +187,26 @@ export default function CountryTransparencyPage() {
             )}
           </div>
 
+          {/* Language selector */}
+          <div className="min-w-[140px]">
+            <label
+              htmlFor="transparency-lang-select"
+              className="block text-sm font-medium mb-1"
+            >
+              Document Language
+            </label>
+            <select
+              id="transparency-lang-select"
+              value={langType}
+              onChange={(e) => setLangType(e.target.value as "ENG" | "ORI")}
+              disabled={isStreaming}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            >
+              <option value="ENG">English</option>
+              <option value="ORI">Original Language</option>
+            </select>
+          </div>
+
           {/* Generate button — green theme */}
           <button
             onClick={generateBriefing}
@@ -193,27 +215,7 @@ export default function CountryTransparencyPage() {
           >
             {isStreaming ? (
               <>
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
+                <LoadingSpinner />
                 Generating&hellip;
               </>
             ) : (
@@ -221,6 +223,14 @@ export default function CountryTransparencyPage() {
             )}
           </button>
         </div>
+
+        {/* Original language banner */}
+        {langType === "ORI" && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            Original language mode — The briefing will be generated from non-English
+            source documents and the response will be in the document&apos;s original language.
+          </div>
+        )}
 
         {/* Status message */}
         {statusMsg && isStreaming && (

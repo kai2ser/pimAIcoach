@@ -38,7 +38,7 @@ export default function RagingPage() {
   // Re-index state
   const [apiKey, setApiKey] = useState("");
   const [reindexing, setReindexing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<"all" | "eng" | null>(null);
+  const [activeFilter, setActiveFilter] = useState<"all" | "eng" | "ori" | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [progress, setProgress] = useState<ReindexProgress | null>(null);
   const [result, setResult] = useState<ReindexResult | null>(null);
@@ -57,13 +57,16 @@ export default function RagingPage() {
     fetchStats();
   }, [fetchStats]);
 
-  async function triggerReindex(langFilter: "all" | "eng") {
+  async function triggerReindex(langFilter: "all" | "eng" | "ori") {
     setReindexing(true);
     setActiveFilter(langFilter);
     setProgress(null);
     setResult(null);
     setError(null);
     setStatusMsg(null);
+
+    // ORI reindex appends to existing collection; ENG/all clears first
+    const clearExisting = langFilter !== "ori";
 
     try {
       const res = await fetch("/api/coach/reindex", {
@@ -74,7 +77,7 @@ export default function RagingPage() {
         },
         body: JSON.stringify({
           lang_filter: langFilter,
-          clear_existing: true,
+          clear_existing: clearExisting,
         }),
       });
 
@@ -191,8 +194,9 @@ export default function RagingPage() {
       {/* ── Input Updates ─────────────────────────────────────── */}
       <h3 className="mb-4 mt-12 text-2xl font-bold">Input Updates</h3>
       <p className="mb-6 text-[var(--muted-foreground)]">
-        The baseline international RAG is based on English originals and
-        translations (where official language is not English).
+        The default RAG index uses English documents. Use &quot;Add Original
+        Language Docs&quot; to append non-English documents for country briefs
+        in the original language.
       </p>
 
       {loading ? (
@@ -301,6 +305,21 @@ export default function RagingPage() {
               </>
             ) : (
               "Re-index English Only"
+            )}
+          </button>
+
+          <button
+            onClick={() => triggerReindex("ori")}
+            disabled={reindexing || !apiKey}
+            className="inline-flex items-center gap-2 rounded-md border border-amber-500 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed dark:text-amber-400 dark:hover:bg-amber-950"
+          >
+            {reindexing && activeFilter === "ori" ? (
+              <>
+                <LoadingSpinner />
+                Re-indexing…
+              </>
+            ) : (
+              "Add Original Language Docs"
             )}
           </button>
         </div>

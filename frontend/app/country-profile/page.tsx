@@ -18,6 +18,7 @@ export default function CountryProfilePage() {
   const [countriesError, setCountriesError] = useState<string | null>(null);
   const [selectedIso3, setSelectedIso3] = useState("");
   const [selectedName, setSelectedName] = useState("");
+  const [langType, setLangType] = useState<"ENG" | "ORI">("ENG");
 
   // Generation state
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -90,6 +91,7 @@ export default function CountryProfilePage() {
 
     await startStream("/api/coach/country-profile", {
       country_iso3: selectedIso3,
+      lang_type: langType,
     });
   }
 
@@ -184,6 +186,26 @@ export default function CountryProfilePage() {
             )}
           </div>
 
+          {/* Language selector */}
+          <div className="min-w-[140px]">
+            <label
+              htmlFor="lang-select"
+              className="block text-sm font-medium mb-1"
+            >
+              Document Language
+            </label>
+            <select
+              id="lang-select"
+              value={langType}
+              onChange={(e) => setLangType(e.target.value as "ENG" | "ORI")}
+              disabled={isStreaming}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40"
+            >
+              <option value="ENG">English</option>
+              <option value="ORI">Original Language</option>
+            </select>
+          </div>
+
           {/* Generate button */}
           <button
             onClick={generateProfile}
@@ -220,6 +242,14 @@ export default function CountryProfilePage() {
             )}
           </button>
         </div>
+
+        {/* Original language banner */}
+        {langType === "ORI" && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+            Original language mode — The profile will be generated from non-English
+            source documents and the response will be in the document&apos;s original language.
+          </div>
+        )}
 
         {/* Status message */}
         {statusMsg && isStreaming && (

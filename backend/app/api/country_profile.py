@@ -39,6 +39,10 @@ _PROFILE_MAX_TOKENS = 8192
 
 class CountryProfileRequest(BaseModel):
     country_iso3: str = Field(description="ISO3 country code")
+    lang_type: str = Field(
+        default="ENG",
+        description="Language version: 'ENG' for English, 'ORI' for original language",
+    )
 
 
 class ExportRequest(BaseModel):
@@ -107,31 +111,50 @@ async def list_countries():
 async def generate_country_profile(request: CountryProfileRequest):
     """Generate a PIM institutional profile and stream via SSE."""
     return StreamingResponse(
-        _profile_stream(request.country_iso3),
+        _profile_stream(request.country_iso3, request.lang_type),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
-async def _profile_stream(country_iso3: str):
+# Language instruction injected into the prompt for ORI profiles
+_ORI_LANGUAGE_INSTRUCTION = """
+
+IMPORTANT — ORIGINAL LANGUAGE MODE:
+The policy documents provided are in their original language (not English).
+- You MUST write the entire profile in the same language as the source documents.
+- Use original-language document titles (name_orig) for citations.
+- All section headings, table headers, and analysis should be in the original language.
+- If documents span multiple languages, use the dominant language."""
+
+
+async def _profile_stream(country_iso3: str, lang_type: str = "ENG"):
     """Generator that builds context, calls the LLM, and yields SSE events."""
+    use_ori = lang_type.upper() == "ORI"
     try:
         # 1. Resolve country name
         country_name = await resolve_country_name(country_iso3) or country_iso3
-        yield _sse({"type": "status", "data": f"Preparing profile for {country_name}..."})
+        lang_label = "original-language" if use_ori else "English"
+        yield _sse({"type": "status", "data": f"Preparing {lang_label} profile for {country_name}..."})
 
-        # 2. Fetch structured policy records
-        records = await fetch_records_with_docs(country=country_iso3)
+        # 2. Fetch structured policy records (filtered by language)
+        records = await fetch_records_with_docs(
+            lang="ORI" if use_ori else "ENG",
+            country=country_iso3,
+        )
         policy_context = format_policy_records_context(records)
 
         yield _sse({
             "type": "status",
-            "data": f"Found {len(records)} policy records. Retrieving document context...",
+            "data": f"Found {len(records)} {lang_label} policy records. Retrieving document context...",
         })
 
-        # 3. Retrieve RAG document chunks for this country
+        # 3. Retrieve RAG document chunks for this country (filtered by language)
         try:
-            retriever = get_retriever(filters={"country": country_iso3}, k=20)
+            filters = {"country": country_iso3}
+            if use_ori:
+                filters["lang_type"] = "ORI"
+            retriever = get_retriever(filters=filters, k=20)
             docs = retriever.invoke(
                 f"Public investment management institutional framework for {country_name}"
             )
@@ -153,10 +176,13 @@ async def _profile_stream(country_iso3: str):
         llm = _get_profile_llm()
         chain = prompt | llm
 
+        # Inject language instruction for ORI profiles
+        language_instruction = _ORI_LANGUAGE_INSTRUCTION if use_ori else ""
+
         async for chunk in chain.astream({
             "country_name": country_name,
             "policy_records_context": policy_context,
-            "rag_context": rag_context,
+            "rag_context": rag_context + language_instruction,
         }):
             if chunk.content:
                 yield _sse({"type": "token", "data": chunk.content})
