@@ -1,6 +1,19 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://pim-policy-profiles-ai.vercel.app/coach",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "destination": "https://pim-policy-profiles-ai.vercel.app/$1",
+      "permanent": true
+    }
+  ]
 }
